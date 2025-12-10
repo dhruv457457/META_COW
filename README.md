@@ -1,6 +1,6 @@
 # 🐮 MetaCowDEX — Social DeFi Trading with Identity & Rewards
 
-MetaCowDEX is a decentralized exchange that blends token swaps, liquidity provisioning, and social trading into a unified on-chain identity experience. Built for the modern DeFi user, MetaCowDEX lets you trade, earn, follow, and build your reputation—all in one place.
+MetaCowDEX is a decentralized exchange that blends token swaps, liquidity provisioning, and social trading into a unified on-chain identity experience. Built for the modern DeFi user, MetaCowDEX lets you trade, earn, follow, and build your reputation—all in one place.a
 
 > 🔴 **Live Demo:** [https://metacowdex.vercel.app](https://metacowdex.vercel.app)  
 > 🟢 **Backend API:** Deployed on Render  
