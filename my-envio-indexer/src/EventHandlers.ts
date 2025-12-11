@@ -4,83 +4,83 @@ import {
 } from "generated";
 
 /**
- * Handler for PairCreated event - Uses contractRegister for dynamic registration
+ * Handler for PairCreated - Register dynamic contract
  */
 MetaCowFactory.PairCreated.contractRegister(({ event, context }) => {
-  const { token0, token1, pair } = event.params;
+  const { pairAddress } = event.params;
   
-  // ✅ Register the pair contract for indexing
-  context.addMetaCowPair(pair);
+  context.addMetaCowPair(pairAddress);
   
-  context.log.info(`✅ Pair registered: ${pair} (${token0}/${token1})`);
+  context.log.info(`✅ Pair registered: ${pairAddress}`);
 });
 
 /**
- * Regular handler for PairCreated - Creates the entity
+ * Handler for PairCreated - Create entity
  */
 MetaCowFactory.PairCreated.handler(async ({ event, context }) => {
-  const { token0, token1, pair } = event.params;
+  const { tokenA, tokenB, pairAddress } = event.params;
   
-  // Create Pair entity
   context.Pair.set({
-    id: pair.toLowerCase(),
-    token0: token0.toLowerCase(),
-    token1: token1.toLowerCase(),
-    reserve0: 0n,
-    reserve1: 0n,
+    id: pairAddress.toLowerCase(),
+    tokenA: tokenA.toLowerCase(),
+    tokenB: tokenB.toLowerCase(),
+    reserveA: 0n,
+    reserveB: 0n,
     totalSwaps: 0,
+    volume24h: 0n,
     lastSyncAt: event.block.timestamp,
   });
 });
 
 /**
- * Handler for Sync event
+ * Handler for ReserveSynced
  */
-MetaCowPair.Sync.handler(async ({ event, context }) => {
+MetaCowPair.ReserveSynced.handler(async ({ event, context }) => {
   const pairAddress = event.srcAddress.toLowerCase();
-  const { reserve0, reserve1 } = event.params;
+  const { reserveA, reserveB } = event.params;
 
   const pair = await context.Pair.get(pairAddress);
   
   if (pair) {
     context.Pair.set({
       ...pair,
-      reserve0: BigInt(reserve0),
-      reserve1: BigInt(reserve1),
+      reserveA: BigInt(reserveA),
+      reserveB: BigInt(reserveB),
       lastSyncAt: event.block.timestamp,
     });
   }
 });
 
 /**
- * Handler for Swap event
+ * Handler for Swapped event
  */
-MetaCowPair.Swap.handler(async ({ event, context }) => {
+MetaCowPair.Swapped.handler(async ({ event, context }) => {
   const pairAddress = event.srcAddress.toLowerCase();
-  const { sender, amount0In, amount1In, amount0Out, amount1Out, to } = event.params;
+  const { user, inputToken, outputToken, inputAmount, outputAmount } = event.params;
 
   const swapId = `${event.transaction.hash}-${event.logIndex}`;
   
   context.SwapEvent.set({
     id: swapId,
     pairAddress,
-    sender: sender.toLowerCase(),
-    amount0In: BigInt(amount0In),
-    amount1In: BigInt(amount1In),
-    amount0Out: BigInt(amount0Out),
-    amount1Out: BigInt(amount1Out),
-    to: to.toLowerCase(),
+    user: user.toLowerCase(),
+    inputToken: inputToken.toLowerCase(),
+    outputToken: outputToken.toLowerCase(),
+    inputAmount: BigInt(inputAmount),
+    outputAmount: BigInt(outputAmount),
     timestamp: event.block.timestamp,
     txHash: event.transaction.hash,
     blockNumber: event.block.number,
   });
 
+  // Update pair statistics
   const pair = await context.Pair.get(pairAddress);
   
   if (pair) {
     context.Pair.set({
       ...pair,
       totalSwaps: pair.totalSwaps + 1,
+      volume24h: pair.volume24h + BigInt(inputAmount),
       lastSyncAt: event.block.timestamp,
     });
   }

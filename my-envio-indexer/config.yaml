@@ -4,23 +4,25 @@ networks:
   - id: 97 # BNB Testnet
     start_block: 46000000
     contracts:
-      # Factory Contract (fixed address)
+      # Factory Contract
       - name: MetaCowFactory
         address:
           - "0x524Fec22546B087E91D198745CdD6ea94C057D79"
         abi_file_path: abis/Factory.json
         handler: src/EventHandlers.ts
         events:
-          - event: PairCreated(address indexed token0, address indexed token1, address pair, uint256)
+          - event: PairCreated(address indexed tokenA, address indexed tokenB, address pairAddress, uint256 index)
       
-      # Dynamic Pair Contracts - MUST have empty address array
+      # Dynamic Pair Contracts
       - name: MetaCowPair
-        address: []  # ✅ EXPLICITLY ADD THIS LINE
+        address: []
         abi_file_path: abis/Pair.json
         handler: src/EventHandlers.ts
         events:
-          - event: Swap(address indexed sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, address indexed to)
+          # ✅ CORRECT event signature from your contract
+          - event: Swapped(address indexed user, address indexed inputToken, address indexed outputToken, uint256 inputAmount, uint256 outputAmount)
             field_selection:
               transaction_fields:
                 - hash
-          - event: Sync(uint112 reserve0, uint112 reserve1)
+          # ✅ CORRECT event signature
+          - event: ReserveSynced(uint256 reserveA, uint256 reserveB)

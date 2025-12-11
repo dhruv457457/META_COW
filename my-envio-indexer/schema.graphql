@@ -1,22 +1,22 @@
 type Pair {
   id: ID!
-  token0: String!
-  token1: String!
-  reserve0: BigInt!
-  reserve1: BigInt!
+  tokenA: String!
+  tokenB: String!
+  reserveA: BigInt!
+  reserveB: BigInt!
   totalSwaps: Int!
+  volume24h: BigInt!
   lastSyncAt: Int!
 }
 
 type SwapEvent {
   id: ID!
   pairAddress: String!
-  sender: String!
-  amount0In: BigInt!
-  amount1In: BigInt!
-  amount0Out: BigInt!
-  amount1Out: BigInt!
-  to: String!
+  user: String!
+  inputToken: String!
+  outputToken: String!
+  inputAmount: BigInt!
+  outputAmount: BigInt!
   timestamp: Int!
   txHash: String!
   blockNumber: Int!
