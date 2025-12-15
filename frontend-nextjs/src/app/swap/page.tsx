@@ -12,6 +12,10 @@ import SwapChart from "@/components/swap/SwapChart";
 import TransactionList, { Transaction } from "@/components/TransactionList";
 import { motion } from "framer-motion";
 
+// ✅ Envio integration imports
+import { fetchSwapsByTokens, getPairInfo } from "@/utils/envioClient";
+import { transformSwapsToChartData, aggregateChartData, ChartDataPoint } from "@/utils/chartUtils";
+
 export default function SwapPage() {
   const { address, isConnected } = useWallet();
   
@@ -23,7 +27,10 @@ export default function SwapPage() {
   const [loading, setLoading] = useState(false);
   const [balanceA, setBalanceA] = useState("0");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
+  
+  // ✅ Chart state
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
 
   // Fetch balance for input token
   useEffect(() => {
@@ -45,7 +52,63 @@ export default function SwapPage() {
     return () => clearInterval(interval);
   }, [address, tokenA]);
 
-  // 1. Calculate Estimated Output
+  // ✅ Fetch chart data from Envio
+  useEffect(() => {
+    const fetchChartData = async () => {
+      if (!tokenA || !tokenB) {
+        setChartData([]);
+        return;
+      }
+
+      setChartLoading(true);
+      try {
+        // First, check if pair exists
+        const pairInfo = await getPairInfo(tokenA.address, tokenB.address);
+        
+        if (!pairInfo) {
+          console.log("No pair found for these tokens yet");
+          setChartData([]);
+          return;
+        }
+
+        console.log(`Fetching swaps for pair: ${pairInfo.id}`);
+
+        // Fetch recent swaps (last 100)
+        const swaps = await fetchSwapsByTokens(tokenA.address, tokenB.address, 100);
+        
+        if (swaps.length === 0) {
+          console.log("No swaps found yet");
+          setChartData([]);
+          return;
+        }
+
+        console.log(`Found ${swaps.length} swaps`);
+
+        // Transform to chart data
+        const rawData = transformSwapsToChartData(swaps, tokenA, tokenB);
+        
+        // Aggregate into 5-minute buckets for smoother chart
+        const aggregated = aggregateChartData(rawData, 300); // 5 min buckets
+        
+        setChartData(aggregated);
+        console.log(`Chart updated with ${aggregated.length} data points`);
+        
+      } catch (error) {
+        console.error("Error fetching chart data:", error);
+        setChartData([]);
+      } finally {
+        setChartLoading(false);
+      }
+    };
+
+    fetchChartData();
+
+    // ✅ Auto-refresh every 30 seconds
+    const interval = setInterval(fetchChartData, 30000);
+    return () => clearInterval(interval);
+  }, [tokenA, tokenB]);
+
+  // Calculate Estimated Output
   useEffect(() => {
     const calculateOut = async () => {
       if (!tokenA || !tokenB || !amountIn || parseFloat(amountIn) <= 0) {
@@ -93,7 +156,7 @@ export default function SwapPage() {
     return () => clearTimeout(timer);
   }, [amountIn, tokenA, tokenB]);
 
-  // 2. Handle Swap Execution
+  // Handle Swap Execution
   const handleSwap = async () => {
     if (!isConnected || !address) {
       toast.error("Please connect wallet first");
@@ -124,7 +187,7 @@ export default function SwapPage() {
       
       const receipt = await swap(pairAddress, amountIn, tokenA.address);
       
-      toast.success("Swap Successful!");
+      toast.success("Swap Successful! Chart will update shortly...");
       
       // Add to local transaction history
       const newTx: Transaction = {
@@ -141,6 +204,16 @@ export default function SwapPage() {
       // Reset form
       setAmountIn("");
       setAmountOut("");
+
+      // ✅ Refresh chart data after successful swap (wait a bit for indexer)
+      setTimeout(async () => {
+        if (tokenA && tokenB) {
+          const swaps = await fetchSwapsByTokens(tokenA.address, tokenB.address, 100);
+          const rawData = transformSwapsToChartData(swaps, tokenA, tokenB);
+          const aggregated = aggregateChartData(rawData, 300);
+          setChartData(aggregated);
+        }
+      }, 5000); // Wait 5 seconds for Envio to index
 
     } catch (error: any) {
       console.error("Swap error:", error);
@@ -165,7 +238,7 @@ export default function SwapPage() {
     }
   };
 
-  // 3. Switch Tokens
+  // Switch Tokens
   const handleSwitch = () => {
     setTokenA(tokenB);
     setTokenB(tokenA);
@@ -203,7 +276,7 @@ export default function SwapPage() {
           </div>
         </motion.div>
 
-        {/* Right Side: Chart */}
+        {/* Right Side: Chart with Live Data */}
         <motion.div 
           initial={{ opacity: 0, x: 20 }} 
           animate={{ opacity: 1, x: 0 }}
@@ -213,7 +286,7 @@ export default function SwapPage() {
             tokenA={tokenA} 
             tokenB={tokenB} 
             data={chartData}
-            loading={false}
+            loading={chartLoading}
           />
         </motion.div>
 
