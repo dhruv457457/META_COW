@@ -1,19 +1,24 @@
-// src/services/tradeExecutor.ts
+// src/services/tradeExecutor.ts (ENHANCED VERSION with output token return)
 import { bundlerClient, publicClient } from "@/lib/smartAccounts/bundlerClient";
-import { encodeFunctionData, parseUnits } from "viem";
+import { encodeFunctionData, parseUnits, type Address } from "viem";
 import dbConnect from "@/lib/dbConnect";
 import CopyTradePermission from "@/models/CopyTradePermission";
 import CopyTrade from "@/models/CopyTrade";
 import { createSessionAccount } from "@/lib/smartAccounts/sessionAccount";
 
+// --- Constants ---
+
+const ENTRYPOINT_ADDRESS_V07 = "0x0000000071727De22E5E9d8BAf0edAc6f37da032" as const;
+
+// --- ABIs ---
+
 const ERC20_ABI = [
   {
     inputs: [
-      { name: "from", type: "address" },
       { name: "to", type: "address" },
       { name: "amount", type: "uint256" },
     ],
-    name: "transferFrom",
+    name: "transfer",
     outputs: [{ name: "", type: "bool" }],
     stateMutability: "nonpayable",
     type: "function",
@@ -29,13 +34,10 @@ const ERC20_ABI = [
     type: "function",
   },
   {
-    inputs: [
-      { name: "to", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    name: "transfer",
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "nonpayable",
+    inputs: [{ name: "account", type: "address" }],
+    name: "balanceOf",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
     type: "function",
   },
 ] as const;
@@ -58,23 +60,15 @@ const PAIR_ABI = [
     name: "swap",
     type: "function",
     inputs: [
-      { name: "inputAmount", type: "uint256" },
+      { name: "amountIn", type: "uint256" },
       { name: "inputToken", type: "address" },
     ],
-    outputs: [{ name: "outputAmount", type: "uint256" }],
+    outputs: [{ name: "amountOut", type: "uint256" }],
     stateMutability: "nonpayable",
   },
-  {
-    name: "getAmountOut",
-    type: "function",
-    inputs: [
-      { name: "inputAmount", type: "uint256" },
-      { name: "inputToken", type: "address" },
-    ],
-    outputs: [{ name: "outputAmount", type: "uint256" }],
-    stateMutability: "view",
-  },
 ] as const;
+
+// --- Interfaces ---
 
 interface SwapData {
   user: string;
@@ -98,26 +92,55 @@ interface ExecuteCopyTradeParams {
   amount: number;
 }
 
+interface DelegationCall {
+  to: Address;
+  data: `0x${string}`;
+  permissionsContext: `0x${string}`;
+  delegationManager: Address;
+}
+
+// --- Helper Functions ---
+
+function isValidAddress(address: string): address is Address {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+function toAddress(address: string): Address {
+  if (!isValidAddress(address)) {
+    throw new Error(`Invalid address: ${address}`);
+  }
+  return address;
+}
+
+// --- Main Function ---
+
 export async function executeCopyTrade({
   permission,
   swap,
   amount,
 }: ExecuteCopyTradeParams): Promise<string> {
-  console.log(`🔄 Executing copy trade for ${permission.userWallet}`);
+  console.log(`🔄 Executing ERC-7715 Copy Trade for ${permission.userWallet}`);
   console.log(`   Amount: ${amount} tokens`);
 
   try {
     await dbConnect();
 
+    // 1. Recover the Session Account
     const { account: sessionAccount } = await createSessionAccount();
-    console.log(`   Session: ${sessionAccount.address}`);
+    console.log(`   Acting as Session: ${sessionAccount.address}`);
 
-    const inputToken = swap.inputToken as `0x${string}`;
-    const outputToken = swap.outputToken as `0x${string}`;
-    const user = permission.userWallet as `0x${string}`;
-    const factory = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS as `0x${string}`;
+    // Validate addresses
+    const inputToken = toAddress(swap.inputToken);
+    const outputToken = toAddress(swap.outputToken);
+    const userWallet = toAddress(permission.userWallet);
+    
+    const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
+    if (!factoryAddress || !isValidAddress(factoryAddress)) {
+      throw new Error("Invalid or missing DEX_ROUTER_ADDRESS in environment");
+    }
+    const factory = factoryAddress as Address;
 
-    // Get pair
+    // 2. Get Liquidity Pair Address
     const pair = await publicClient.readContract({
       address: factory,
       abi: FACTORY_ABI,
@@ -125,139 +148,253 @@ export async function executeCopyTrade({
       args: [inputToken, outputToken],
     });
 
-    console.log(`   Pair: ${pair}`);
-
-    const amountIn = parseUnits(amount.toString(), 18);
-
-    // Get expected output
-    let amountOut: bigint;
-    try {
-      amountOut = await publicClient.readContract({
-        address: pair,
-        abi: PAIR_ABI,
-        functionName: "getAmountOut",
-        args: [amountIn, inputToken],
-      });
-    } catch {
-      amountOut = (amountIn * 90n) / 100n;
+    if (!pair || pair === "0x0000000000000000000000000000000000000000") {
+      throw new Error("Liquidity pair does not exist");
     }
 
-    console.log(`   Building 4-step multi-call (NO delegation)...`);
+    console.log(`   Target Pair: ${pair}`);
 
-    // NO permissionsContext or delegationManager!
-    // Just normal ERC-4337 calls
-    const calls = [
-      // Step 1: Pull tokens from user
-      {
-        to: inputToken,
-        data: encodeFunctionData({
-          abi: ERC20_ABI,
-          functionName: "transferFrom",
-          args: [user, sessionAccount.address, amountIn],
-        }),
-        value: 0n,
-      },
-      // Step 2: Approve pair
-      {
-        to: inputToken,
-        data: encodeFunctionData({
-          abi: ERC20_ABI,
-          functionName: "approve",
-          args: [pair, amountIn],
-        }),
-        value: 0n,
-      },
-      // Step 3: Swap
-      {
-        to: pair,
-        data: encodeFunctionData({
-          abi: PAIR_ABI,
-          functionName: "swap",
-          args: [amountIn, inputToken],
-        }),
-        value: 0n,
-      },
-      // Step 4: Send output to user
-      {
-        to: outputToken,
-        data: encodeFunctionData({
-          abi: ERC20_ABI,
-          functionName: "transfer",
-          args: [user, amountOut],
-        }),
-        value: 0n,
-      },
-    ];
+    // 3. Calculate Amounts
+    const amountIn = parseUnits(amount.toString(), 18);
 
-    console.log(`   Sending UserOp...`);
+    console.log(`   📋 4-Step Architecture:`);
+    console.log(`      1️⃣  Transfer tokens: User → Session (delegated)`);
+    console.log(`      2️⃣  Approve pair: Session owns tokens`);
+    console.log(`      3️⃣  Execute swap: Session swaps`);
+    console.log(`      4️⃣  Return tokens: Session → User`);
 
-    // Normal sendUserOperation (not sendUserOperationWithDelegation)
-    const userOpHash = await bundlerClient.sendUserOperation({
+    const entryPointAddress = (process.env.NEXT_PUBLIC_ENTRYPOINT_ADDRESS || 
+                               ENTRYPOINT_ADDRESS_V07) as Address;
+
+    // --- STEP 1: Transfer tokens from user to session (DELEGATED) ---
+    const transferCallData = encodeFunctionData({
+      abi: ERC20_ABI,
+      functionName: "transfer",
+      args: [sessionAccount.address as Address, amountIn],
+    });
+
+    const delegationManager = toAddress(permission.delegationManager);
+    const permissionsContext = permission.permissionsContext as `0x${string}`;
+
+    const delegatedTransferCall: DelegationCall = {
+      to: inputToken,
+      data: transferCallData,
+      permissionsContext,
+      delegationManager,
+    };
+
+    console.log(`   1️⃣  Delegated transfer (user → session)...`);
+
+    const transferUserOpHash = await bundlerClient.sendUserOperationWithDelegation({
       account: sessionAccount,
-      calls,
+      calls: [delegatedTransferCall],
+      publicClient,
+      entryPointAddress,
       maxFeePerGas: 3000000000n,
       maxPriorityFeePerGas: 2000000000n,
     });
 
-    console.log(`   ✅ UserOp: ${userOpHash}`);
+    console.log(`   ✅ Transfer UserOp: ${transferUserOpHash}`);
 
-    let txHash: string | undefined;
+    try {
+      const transferReceipt = await bundlerClient.waitForUserOperationReceipt({
+        hash: transferUserOpHash,
+      });
+      console.log(`   ✅ Transfer confirmed: ${transferReceipt.receipt.transactionHash}`);
+    } catch (e) {
+      console.warn("   ⚠️ Transfer receipt wait timed out");
+    }
+
+    // Small delay to ensure transfer is processed
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // --- STEP 2 & 3: Approve and Swap ---
+    console.log(`   2️⃣ 3️⃣  Session executing approve + swap...`);
+
+    const approveCallData = encodeFunctionData({
+      abi: ERC20_ABI,
+      functionName: "approve",
+      args: [pair, amountIn],
+    });
+
+    const swapCallData = encodeFunctionData({
+      abi: PAIR_ABI,
+      functionName: "swap",
+      args: [amountIn, inputToken],
+    });
+
+    const swapUserOpHash = await bundlerClient.sendUserOperation({
+      account: sessionAccount,
+      calls: [
+        { to: inputToken, data: approveCallData },
+        { to: pair, data: swapCallData },
+      ],
+      entryPointAddress,
+      maxFeePerGas: 3000000000n,
+      maxPriorityFeePerGas: 2000000000n,
+    });
+
+    console.log(`   ✅ Swap UserOp: ${swapUserOpHash}`);
+
+    let swapTxHash: string | undefined;
     try {
       const receipt = await bundlerClient.waitForUserOperationReceipt({
-        hash: userOpHash,
+        hash: swapUserOpHash,
       });
-      txHash = receipt.receipt.transactionHash;
-      console.log(`   ✅ TX: ${txHash}`);
-      console.log(`   🔗 https://testnet.bscscan.com/tx/${txHash}`);
-    } catch {}
+      swapTxHash = receipt.receipt.transactionHash;
+      console.log(`   ✅ Swap confirmed: ${swapTxHash}`);
+    } catch (e) {
+      console.warn("   ⚠️ Swap receipt wait timed out");
+    }
 
+    // Small delay to ensure swap is processed
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // --- STEP 4: Transfer output tokens back to user ---
+    console.log(`   4️⃣  Returning output tokens to user...`);
+
+    try {
+      // Get session's balance of output token
+      const outputBalance = await publicClient.readContract({
+        address: outputToken,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [sessionAccount.address],
+      });
+
+      console.log(`   Session output balance: ${outputBalance.toString()}`);
+
+      if (outputBalance > 0n) {
+        const returnCallData = encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: "transfer",
+          args: [userWallet, outputBalance],
+        });
+
+        const returnUserOpHash = await bundlerClient.sendUserOperation({
+          account: sessionAccount,
+          calls: [{ to: outputToken, data: returnCallData }],
+          entryPointAddress,
+          maxFeePerGas: 3000000000n,
+          maxPriorityFeePerGas: 2000000000n,
+        });
+
+        console.log(`   ✅ Return UserOp: ${returnUserOpHash}`);
+
+        try {
+          const returnReceipt = await bundlerClient.waitForUserOperationReceipt({
+            hash: returnUserOpHash,
+          });
+          console.log(`   ✅ Return confirmed: ${returnReceipt.receipt.transactionHash}`);
+          console.log(`   🎉 User received ${outputBalance.toString()} output tokens!`);
+        } catch (e) {
+          console.warn("   ⚠️ Return receipt wait timed out");
+        }
+      } else {
+        console.warn("   ⚠️ No output tokens to return (swap may have failed)");
+      }
+    } catch (e) {
+      console.error("   ❌ Failed to return output tokens:", e);
+      // Continue anyway - we'll save what we have
+    }
+
+    console.log(`   🔗 https://testnet.bscscan.com/tx/${swapTxHash || transferUserOpHash}`);
+
+    // Save trade record
     try {
       await CopyTrade.create({
         permissionId: permission._id.toString(),
-        userOpHash,
-        transactionHash: txHash,
+        userOpHash: swapUserOpHash,
+        transactionHash: swapTxHash || "pending",
         userId: permission.userWallet,
         traderAddress: swap.user,
-        inputToken,
-        outputToken,
+        inputToken: inputToken,
+        outputToken: outputToken,
         amount: amountIn.toString(),
         originalTxHash: swap.txHash,
       });
-      console.log(`   ✅ Saved`);
+      console.log(`   ✅ Trade saved to DB`);
     } catch (e: any) {
-      if (e.code !== 11000) throw e;
+      if (e.code !== 11000) {
+        console.error("DB Save Error:", e);
+      }
     }
 
-    return userOpHash;
+    return swapUserOpHash;
   } catch (error: any) {
-    console.error("   ❌ Error:", error);
+    console.error("   ❌ Execution Error:", error);
+    console.error("   Error details:", {
+      message: error.message,
+      code: error.code,
+      data: error.data,
+    });
     throw error;
   }
 }
 
 export async function getCopyTradeHistory(userWallet: string, limit: number = 20) {
-  await dbConnect();
-  return await CopyTrade.find({ userId: userWallet.toLowerCase() })
-    .sort({ executedAt: -1 })
-    .limit(limit);
+  try {
+    await dbConnect();
+    
+    if (!userWallet || !isValidAddress(userWallet)) {
+      throw new Error("Invalid user wallet address");
+    }
+
+    return await CopyTrade.find({ userId: userWallet.toLowerCase() })
+      .sort({ executedAt: -1 })
+      .limit(limit)
+      .lean();
+  } catch (error) {
+    console.error("Error fetching copy trade history:", error);
+    throw error;
+  }
 }
 
 export async function getCopyTradeStats(userWallet: string) {
-  await dbConnect();
-  const trades = await CopyTrade.find({ userId: userWallet.toLowerCase() });
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayTrades = trades.filter(t => t.executedAt >= today);
-  const activePermissions = await CopyTradePermission.find({
-    userWallet: userWallet.toLowerCase(),
-    isActive: true,
-  });
+  try {
+    await dbConnect();
+    
+    if (!userWallet || !isValidAddress(userWallet)) {
+      throw new Error("Invalid user wallet address");
+    }
 
-  return {
-    totalTrades: trades.length,
-    totalVolume: trades.reduce((sum, t) => sum + parseFloat(t.amount), 0),
-    todayTrades: todayTrades.length,
-    todayVolume: todayTrades.reduce((sum, t) => sum + parseFloat(t.amount), 0),
-    activeCopies: activePermissions.length,
-  };
+    const walletLower = userWallet.toLowerCase();
+    const trades = await CopyTrade.find({ userId: walletLower }).lean();
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayTrades = trades.filter((t) => {
+      const tradeDate = new Date(t.executedAt);
+      return tradeDate >= today;
+    });
+
+    const activePermissions = await CopyTradePermission.find({
+      userWallet: walletLower,
+      isActive: true,
+    }).lean();
+
+    return {
+      totalTrades: trades.length,
+      totalVolume: trades.reduce((sum, t) => {
+        try {
+          return sum + parseFloat(t.amount || "0");
+        } catch {
+          return sum;
+        }
+      }, 0),
+      todayTrades: todayTrades.length,
+      todayVolume: todayTrades.reduce((sum, t) => {
+        try {
+          return sum + parseFloat(t.amount || "0");
+        } catch {
+          return sum;
+        }
+      }, 0),
+      activeCopies: activePermissions.length,
+    };
+  } catch (error) {
+    console.error("Error fetching copy trade stats:", error);
+    throw error;
+  }
 }

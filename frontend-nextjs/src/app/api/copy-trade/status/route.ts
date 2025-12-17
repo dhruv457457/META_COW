@@ -1,4 +1,3 @@
-// src/app/api/copy-trade/status/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import CopyTradePermission from "@/models/CopyTradePermission";
@@ -8,22 +7,30 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const userAddress = searchParams.get("userAddress");
     const traderAddress = searchParams.get("traderAddress");
+    const inputToken = searchParams.get("inputToken");
 
     if (!userAddress || !traderAddress) {
       return NextResponse.json(
-        { error: "Missing required parameters" },
+        { error: "Missing userAddress or traderAddress" },
         { status: 400 }
       );
     }
 
     await dbConnect();
 
-    // Find active permission
-    const permission = await CopyTradePermission.findOne({
+    // Build query
+    const query: any = {
       userWallet: userAddress.toLowerCase(),
       traderAddress: traderAddress.toLowerCase(),
       isActive: true,
-    });
+    };
+
+    // ✅ If inputToken provided, check for that specific token
+    if (inputToken) {
+      query.inputToken = inputToken.toLowerCase();
+    }
+
+    const permission = await CopyTradePermission.findOne(query);
 
     return NextResponse.json({
       isEnabled: !!permission,

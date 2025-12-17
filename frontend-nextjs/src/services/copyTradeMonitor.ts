@@ -4,10 +4,12 @@ import path from 'path';
 
 // Load .env.local
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
 import { fetchLatestSwaps } from "@/utils/envioClient";
 import dbConnect from "@/lib/dbConnect";
 import CopyTradePermission from "@/models/CopyTradePermission";
 import { executeCopyTrade } from "./tradeExecutor";
+import { formatUnits } from "viem";
 
 let processedSwaps = new Set<string>();
 
@@ -16,96 +18,103 @@ let processedSwaps = new Set<string>();
  */
 async function monitorSwaps() {
   try {
-    console.log("🔍 Checking for new swaps...");
-    
     await dbConnect();
 
-    // Fetch latest swaps from Envio
+    // 1. Fetch latest swaps from Envio
     const swaps = await fetchLatestSwaps(20);
     
-    // Get all active permissions from MongoDB
+    // 2. Get all active permissions
     const activePermissions = await CopyTradePermission.find({ 
       isActive: true 
     });
 
-    if (activePermissions.length === 0) {
-      console.log("   No active copy trade permissions found");
-      return;
-    }
+    if (activePermissions.length === 0) return;
 
-    console.log(`   Found ${activePermissions.length} active permissions`);
-
-    // Check each swap
+    // 3. Process each swap
     for (const swap of swaps) {
       const swapId = `${swap.txHash}-${swap.timestamp}`;
       
       // Skip if already processed
       if (processedSwaps.has(swapId)) continue;
       
-      // Mark as processed
+      // Add to processed set
       processedSwaps.add(swapId);
       
-      // Find permissions for this trader
-      const permissions = activePermissions.filter(
-        (p) => p.traderAddress.toLowerCase() === swap.user.toLowerCase()
+      // ✅ UPDATED: Find copiers for this specific trader AND token
+      const copiers = activePermissions.filter(
+        (p) => 
+          p.traderAddress.toLowerCase() === swap.user.toLowerCase() &&
+          p.inputToken?.toLowerCase() === swap.inputToken.toLowerCase()
       );
 
-      if (permissions.length === 0) continue;
+      if (copiers.length === 0) {
+        // Optional: Log when a trade happens but no permissions exist for this token
+        const anyTraderPermissions = activePermissions.filter(
+          (p) => p.traderAddress.toLowerCase() === swap.user.toLowerCase()
+        );
+        
+        if (anyTraderPermissions.length > 0) {
+          console.log(`\n💡 Trade detected for tracked trader but different token`);
+          console.log(`   Trader: ${swap.user.slice(0, 10)}...`);
+          console.log(`   Token: ${swap.inputToken.slice(0, 10)}... (no permission)`);
+          console.log(`   User has permissions for: ${anyTraderPermissions.map(p => p.inputToken ? p.inputToken.slice(0, 6) + '...' : 'unknown').join(', ')}`);
+        }
+        continue;
+      }
 
-      console.log(`\n🎯 New swap detected from ${swap.user.slice(0, 10)}...`);
-      console.log(`   Input: ${swap.inputToken.slice(0, 10)}...`);
-      console.log(`   Output: ${swap.outputToken.slice(0, 10)}...`);
-      console.log(`   ${permissions.length} copiers found`);
+      console.log(`\n🎯 New Master Trade Detected!`);
+      console.log(`   Trader: ${swap.user.slice(0, 10)}...`);
+      console.log(`   Token: ${swap.inputToken.slice(0, 10)}...`);
+      console.log(`   Copiers: ${copiers.length}`);
 
-      // Execute copy trade for each permission
-      for (const permission of permissions) {
+      // 4. Execute for each copier
+      for (const permission of copiers) {
         try {
-          // Check if permission expired
-          if (new Date() > permission.expiresAt) {
-            console.log(`   ⏰ Permission expired for ${permission.userWallet}`);
-            await CopyTradePermission.findByIdAndUpdate(permission._id, {
-              isActive: false,
-            });
+          // A. Check Expiry - ✅ Use expiresAt (Date) instead of expiry
+          if (permission.expiresAt && new Date() > new Date(permission.expiresAt)) {
+            console.log(`   ⏰ Permission expired for ${permission.userWallet.slice(0, 8)}...`);
+            await CopyTradePermission.findByIdAndUpdate(permission._id, { isActive: false });
             continue;
           }
 
-          // Check daily limit
+          // B. Check & Reset Daily Limits
           const dailyLimit = parseFloat(permission.dailyLimit);
-          const spentToday = parseFloat(permission.spentToday);
+          let spentToday = parseFloat(permission.spentToday || "0");
 
-          // Reset daily spending if needed (24h passed)
           const now = new Date();
-          const lastReset = new Date(permission.lastResetAt);
+          const lastReset = permission.lastResetAt ? new Date(permission.lastResetAt) : new Date(0);
           const hoursSinceReset = (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60);
           
-          let currentSpent = spentToday;
           if (hoursSinceReset >= 24) {
-            console.log(`   🔄 Resetting daily limit for ${permission.userWallet.slice(0, 10)}...`);
-            currentSpent = 0;
+            console.log(`   🔄 Resetting daily limit for ${permission.userWallet.slice(0, 8)}...`);
+            spentToday = 0;
             await CopyTradePermission.findByIdAndUpdate(permission._id, {
               spentToday: "0",
               lastResetAt: now,
             });
           }
 
-          // Calculate copy amount (10% of original trade for demo)
-          const copyAmount = parseFloat(swap.inputAmount) * 0.1 / 1e18;
+          // C. Calculate Copy Amount
+          const amountInHuman = parseFloat(formatUnits(BigInt(swap.inputAmount), 18));
+          const copyAmount = amountInHuman * 0.1; // Copy 10% size
 
-          // Check if within daily limit
-          if (currentSpent + copyAmount > dailyLimit) {
-            console.log(`   💰 Daily limit reached for ${permission.userWallet.slice(0, 10)}...`);
-            console.log(`      Spent: ${currentSpent}/${dailyLimit} tokens`);
+          // Validate Limit
+          if (spentToday + copyAmount > dailyLimit) {
+            console.log(`   💰 Daily limit hit for ${permission.userWallet.slice(0, 8)}...`);
+            console.log(`      Spent: ${spentToday.toFixed(4)}, Limit: ${dailyLimit}, Attempted: ${copyAmount.toFixed(4)}`);
             continue;
           }
 
-          // Execute the copy trade
-          console.log(`   ⚡ Executing copy trade for ${permission.userWallet.slice(0, 10)}...`);
+          // D. Execute Trade
+          console.log(`   ⚡ Executing copy for ${permission.userWallet.slice(0, 8)}...`);
+          console.log(`      Amount: ${copyAmount.toFixed(4)} (${((copyAmount / dailyLimit) * 100).toFixed(1)}% of daily limit)`);
           
           const userOpHash = await executeCopyTrade({
             permission: {
               userWallet: permission.userWallet,
               sessionAccount: permission.sessionAccount,
-permissionsContext: permission.permissionsContext as `0x${string}`,              delegationManager: permission.delegationManager,
+              permissionsContext: permission.permissionsContext,
+              delegationManager: permission.delegationManager,
               _id: permission._id,
             },
             swap: {
@@ -118,28 +127,31 @@ permissionsContext: permission.permissionsContext as `0x${string}`,             
             amount: copyAmount,
           });
 
-          console.log(`   ✅ Copy trade executed! UserOp: ${userOpHash}`);
+          console.log(`   ✅ Success! UserOp: ${userOpHash}`);
 
-          // Update spent amount
+          // E. Update DB
+          const newSpentToday = spentToday + copyAmount;
           await CopyTradePermission.findByIdAndUpdate(permission._id, {
-            spentToday: (currentSpent + copyAmount).toString(),
+            spentToday: newSpentToday.toString(),
           });
           
+          console.log(`   📊 Daily spend updated: ${newSpentToday.toFixed(4)}/${dailyLimit}`);
+          
         } catch (error: any) {
-          console.error(`   ❌ Failed to copy trade for ${permission.userWallet.slice(0, 10)}...`);
+          console.error(`   ❌ Execution Failed for ${permission.userWallet.slice(0, 8)}...`);
           console.error(`      Error: ${error.message}`);
         }
       }
     }
 
-    // Clean up old processed swaps (keep last 1000)
+    // Cleanup memory
     if (processedSwaps.size > 1000) {
-      const swapsArray = Array.from(processedSwaps);
-      processedSwaps = new Set(swapsArray.slice(-1000));
+      const arr = Array.from(processedSwaps);
+      processedSwaps = new Set(arr.slice(-500));
     }
 
   } catch (error: any) {
-    console.error("❌ Monitor error:", error.message);
+    console.error("Monitor Error:", error.message);
   }
 }
 
@@ -148,17 +160,17 @@ permissionsContext: permission.permissionsContext as `0x${string}`,             
  */
 async function startMonitor() {
   console.log("🚀 Copy Trade Monitor Started");
-  console.log("   Checking every 10 seconds...");
+  console.log("   Listening for events on Envio...");
   console.log("   Press Ctrl+C to stop\n");
 
-  // Initial check
+  // Initial run
   await monitorSwaps();
 
-  // Check every 10 seconds
+  // Poll every 10 seconds
   setInterval(monitorSwaps, 10000);
 }
 
-// Start if run directly
+// Allow running directly via `ts-node src/services/copyTradeMonitor.ts`
 if (require.main === module) {
   startMonitor().catch(console.error);
 }

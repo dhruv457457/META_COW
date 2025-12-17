@@ -1,11 +1,11 @@
-// src/app/api/copy-trade/disable/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import CopyTradePermission from "@/models/CopyTradePermission";
 
 export async function POST(req: NextRequest) {
   try {
-    const { userAddress, traderAddress } = await req.json();
+    const body = await req.json();
+    const { userAddress, traderAddress, inputToken } = body;
 
     if (!userAddress || !traderAddress) {
       return NextResponse.json(
@@ -16,34 +16,32 @@ export async function POST(req: NextRequest) {
 
     await dbConnect();
 
-    // Find and deactivate the permission
-    const permission = await CopyTradePermission.findOneAndUpdate(
-      {
-        userWallet: userAddress.toLowerCase(),
-        traderAddress: traderAddress.toLowerCase(),
-        isActive: true,
-      },
-      {
-        isActive: false,
-      },
-      { new: true }
-    );
+    // Build query
+    const query: any = {
+      userWallet: userAddress.toLowerCase(),
+      traderAddress: traderAddress.toLowerCase(),
+    };
 
-    if (!permission) {
-      return NextResponse.json(
-        { error: "Permission not found" },
-        { status: 404 }
-      );
+    // ✅ If inputToken provided, disable only that specific permission
+    if (inputToken) {
+      query.inputToken = inputToken.toLowerCase();
     }
+
+    const result = await CopyTradePermission.updateMany(query, {
+      isActive: false,
+    });
 
     return NextResponse.json({
       success: true,
-      message: "Copy trading disabled",
+      message: inputToken
+        ? "Copy trade disabled for specific token"
+        : "Copy trade disabled for all tokens",
+      modifiedCount: result.modifiedCount,
     });
   } catch (error: any) {
     console.error("Disable copy trade error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to disable copy trading" },
+      { error: error.message || "Failed to disable copy trade" },
       { status: 500 }
     );
   }

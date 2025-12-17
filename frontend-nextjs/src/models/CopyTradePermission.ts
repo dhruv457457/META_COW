@@ -5,6 +5,7 @@ export interface ICopyTradePermission extends Document {
   userWallet: string;
   traderAddress: string;
   traderUsername: string;
+  inputToken: string; // ✅ ADD THIS LINE
   sessionAccount: string;
   permissionsContext: string;
   delegationManager: string;
@@ -30,6 +31,14 @@ const CopyTradePermissionSchema = new Schema<ICopyTradePermission>({
   traderUsername: {
     type: String,
     required: true,
+  },
+  // ✅ ADD THIS FIELD
+ inputToken: {
+    type: String,
+    required: false,
+    default: "0xe66b76f47090b76436d11d7f329e7ad0ad7ee9f0",
+    lowercase: true,
+    index: true,
   },
   sessionAccount: {
     type: String,
@@ -71,8 +80,8 @@ const CopyTradePermissionSchema = new Schema<ICopyTradePermission>({
   },
 });
 
-// Compound indexes for efficient queries
-CopyTradePermissionSchema.index({ userWallet: 1, traderAddress: 1 });
+// ✅ UPDATE THIS INDEX to include inputToken
+CopyTradePermissionSchema.index({ userWallet: 1, traderAddress: 1, inputToken: 1 });
 CopyTradePermissionSchema.index({ traderAddress: 1, isActive: 1 });
 CopyTradePermissionSchema.index({ isActive: 1 });
 
