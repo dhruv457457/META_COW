@@ -1,10 +1,10 @@
-// src/services/tradeExecutor.ts (ENHANCED VERSION with output token return)
-import { bundlerClient, publicClient } from "@/lib/smartAccounts/bundlerClient";
+// src/services/tradeExecutor.ts (Memory optimized with pair validation)
+import { bundlerClient, publicClient } from "../lib/smartAccounts/bundlerClient";
 import { encodeFunctionData, parseUnits, type Address } from "viem";
-import dbConnect from "@/lib/dbConnect";
-import CopyTradePermission from "@/models/CopyTradePermission";
-import CopyTrade from "@/models/CopyTrade";
-import { createSessionAccount } from "@/lib/smartAccounts/sessionAccount";
+import dbConnect from "../lib/dbConnect";
+import CopyTradePermission from "../models/CopyTradePermission";
+import CopyTrade from "../models/CopyTrade";
+import { createSessionAccount } from "../lib/smartAccounts/sessionAccount";
 
 // --- Constants ---
 
@@ -134,22 +134,40 @@ export async function executeCopyTrade({
     const outputToken = toAddress(swap.outputToken);
     const userWallet = toAddress(permission.userWallet);
     
-    const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
+    // ✅ Support both DEX_ROUTER_ADDRESS and NEXT_PUBLIC_DEX_ROUTER_ADDRESS
+const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
     if (!factoryAddress || !isValidAddress(factoryAddress)) {
       throw new Error("Invalid or missing DEX_ROUTER_ADDRESS in environment");
     }
     const factory = factoryAddress as Address;
 
-    // 2. Get Liquidity Pair Address
-    const pair = await publicClient.readContract({
-      address: factory,
-      abi: FACTORY_ABI,
-      functionName: "getPair",
-      args: [inputToken, outputToken],
-    });
+    // 2. Get Liquidity Pair Address with error handling
+    let pair: Address;
+    try {
+      pair = await publicClient.readContract({
+        address: factory,
+        abi: FACTORY_ABI,
+        functionName: "getPair",
+        args: [inputToken, outputToken],
+      });
 
-    if (!pair || pair === "0x0000000000000000000000000000000000000000") {
-      throw new Error("Liquidity pair does not exist");
+      if (!pair || pair === "0x0000000000000000000000000000000000000000") {
+        console.warn(`   ⚠️  Liquidity pair does not exist for this token combination`);
+        console.warn(`      Input: ${inputToken.slice(0, 10)}...`);
+        console.warn(`      Output: ${outputToken.slice(0, 10)}...`);
+        console.warn(`      Skipping trade...`);
+        throw new Error("PAIR_NOT_FOUND");
+      }
+    } catch (error: any) {
+      if (error.message === "PAIR_NOT_FOUND") {
+        throw error;
+      }
+      // Contract reverted - pair doesn't exist
+      console.warn(`   ⚠️  Liquidity pair does not exist (contract reverted)`);
+      console.warn(`      Input: ${inputToken.slice(0, 10)}...`);
+      console.warn(`      Output: ${outputToken.slice(0, 10)}...`);
+      console.warn(`      Skipping trade...`);
+      throw new Error("PAIR_NOT_FOUND");
     }
 
     console.log(`   Target Pair: ${pair}`);
@@ -163,8 +181,12 @@ export async function executeCopyTrade({
     console.log(`      3️⃣  Execute swap: Session swaps`);
     console.log(`      4️⃣  Return tokens: Session → User`);
 
-    const entryPointAddress = (process.env.NEXT_PUBLIC_ENTRYPOINT_ADDRESS || 
-                               ENTRYPOINT_ADDRESS_V07) as Address;
+    // ✅ Support both ENTRYPOINT_ADDRESS and NEXT_PUBLIC_ENTRYPOINT_ADDRESS
+    const entryPointAddress = (
+      process.env.ENTRYPOINT_ADDRESS || 
+      process.env.NEXT_PUBLIC_ENTRYPOINT_ADDRESS || 
+      ENTRYPOINT_ADDRESS_V07
+    ) as Address;
 
     // --- STEP 1: Transfer tokens from user to session (DELEGATED) ---
     const transferCallData = encodeFunctionData({

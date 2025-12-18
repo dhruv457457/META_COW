@@ -1,10 +1,5 @@
+// src/lib/dbConnect.ts
 import mongoose from 'mongoose';
-
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/metacow";
-
-if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable');
-}
 
 interface MongooseCache {
   conn: typeof mongoose | null;
@@ -23,6 +18,13 @@ if (!global.mongoose) {
 }
 
 async function dbConnect() {
+  // Check for MongoDB URI inside the function
+  const MONGODB_URI = process.env.MONGODB_URI;
+  
+  if (!MONGODB_URI) {
+    throw new Error('Please define the MONGODB_URI environment variable in .env or .env.local');
+  }
+
   // Return existing connection if available
   if (cached.conn) {
     console.log('✅ Using cached MongoDB connection');
@@ -36,6 +38,8 @@ async function dbConnect() {
     };
 
     console.log('🔄 Creating new MongoDB connection...');
+    console.log('🔍 Connecting to:', MONGODB_URI.substring(0, 20) + '...');
+    
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
       console.log('✅ MongoDB connected successfully');
       return mongoose;

@@ -2,14 +2,16 @@
   "name": "frontend-nextjs",
   "version": "0.1.0",
   "private": true,
+
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "monitor": "ts-node -r tsconfig-paths/register --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" src/services/copyTradeMonitor.ts",
-    "db:nuke": "ts-node src/scripts/resetDb.ts"
-  },
+    "monitor": "cross-env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=460 tsx src/services/copyTradeMonitor.ts",
+    "monitor:dev": "tsx src/services/copyTradeMonitor.ts",
+    "lint": "next lint"
+  }
+,
   "dependencies": {
     "@headlessui/react": "^2.2.9",
     "@metamask/sdk": "^0.34.0",
@@ -37,12 +39,14 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
