@@ -168,7 +168,7 @@ export default function LiquidityForm({
                           !isInsufficientBalanceA && !isInsufficientBalanceB;
 
   return (
-    <div className="bg-white rounded-3xl shadow-xl border border-gray-100 relative ">
+    <div className="bg-white rounded-3xl shadow-xl border border-gray-100 relative z-10">
       <div className="flex border-b border-gray-100">
         <button
           onClick={() => setActiveTab("add")}

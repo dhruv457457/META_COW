@@ -2,7 +2,6 @@
   "name": "frontend-nextjs",
   "version": "0.1.0",
   "private": true,
-
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,9 +9,7 @@
     "monitor": "cross-env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=460 tsx src/services/copyTradeMonitor.ts",
     "monitor:dev": "tsx src/services/copyTradeMonitor.ts",
     "lint": "next lint"
-    
-  }
-,
+  },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
     "@metamask/sdk": "^0.34.0",
@@ -37,6 +34,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
