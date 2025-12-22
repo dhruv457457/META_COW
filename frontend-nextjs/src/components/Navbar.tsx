@@ -19,6 +19,8 @@ const BNB_TESTNET_PARAMS = {
 };
 
 // --- Icons ---
+
+
 const HomeIcon = (props: any) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" {...props}><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z" /></svg>
 );
@@ -117,9 +119,7 @@ export default function Navbar() {
             <div className="flex-shrink-0">
               <Link href="/" className="flex items-center gap-2 group">
                 {/* Ensure you have an image or use a text fallback */}
-                <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold group-hover:rotate-12 transition-transform">
-                    🐮
-                </div>
+                  <img src="/assets/metacow-logo.png" alt="" className="w-15 h-15 object-contain" />                    
                 <span className="text-2xl font-bold text-gray-800 tracking-tight hidden sm:block">
                   MetaCow
                 </span>

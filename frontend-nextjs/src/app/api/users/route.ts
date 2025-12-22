@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import User from "@/models/User";
 
-// GET: Get list of users
+// GET: Get list of users (for search)
 export async function GET(req: NextRequest) {
   await dbConnect();
   

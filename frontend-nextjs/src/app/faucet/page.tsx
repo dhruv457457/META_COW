@@ -8,7 +8,7 @@ import { toast } from "react-hot-toast";
 import { ERC20_ABI } from "@/utils/constants"; // ✅ Import ERC20_ABI
 
 // Faucet Contract Address on BSC Testnet
-const FAUCET_ADDRESS = "0xD1504b93610AaA68C1F93165120b7b2B906ae9A8";
+const FAUCET_ADDRESS = "0x0120A0cE53F9119a997F72657611A4d4AEEA3cB4";
 
 const FAUCET_ABI = [
   "function claim(address token) external",

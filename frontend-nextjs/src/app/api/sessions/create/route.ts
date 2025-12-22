@@ -1,7 +1,5 @@
 // src/app/api/sessions/create/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import Session from "@/models/Session";
 import { createSessionAccount } from "@/lib/smartAccounts/sessionAccount";
 
 export async function POST(req: NextRequest) {
@@ -15,36 +13,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await dbConnect();
-
-    // Check if session already exists for this user
-    const existingSession = await Session.findOne({
-      userAddress: userAddress.toLowerCase(),
-    });
-
-    if (existingSession) {
-      return NextResponse.json({
-        sessionAccount: {
-          address: existingSession.address,
-        },
-        message: "Session already exists",
-      });
-    }
-
-    // Create new session account
+    // ✅ Just return the shared session account
+    // No database needed - it's the same for everyone!
     const { address } = await createSessionAccount();
 
-    // Save to database
-    const session = await Session.create({
-      userAddress: userAddress.toLowerCase(),
-      address: address.toLowerCase(),
-    });
+    console.log(`Session account for user ${userAddress}: ${address}`);
 
     return NextResponse.json({
       sessionAccount: {
-        address: session.address,
+        address: address,
       },
     });
+
   } catch (error: any) {
     console.error("Create session error:", error);
     return NextResponse.json(

@@ -14,13 +14,13 @@ export const tokenList: Token[] = [
   },
   {
     symbol: "TKB",
-    address: "0x2AaF51745dbf59938fD364F08f06E6d8B34f4b49",
+    address: "0x7B37899552C606DCA472dEca69478E41acF474C0",
     decimals: 18,
     logoURI: "/logos/tkb.png",
   },
   {
     symbol: "USD",
-    address: "0x021D0f2212ec1869933F4D21ea76dCF9e127396B",
+    address: "0xa4b2b8954dB244B3a675aa3d0c78000db5B4D88b",
     decimals: 18,
     logoURI: "/logos/usdt.png",
   },

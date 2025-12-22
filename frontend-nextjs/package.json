@@ -8,8 +8,16 @@
     "build": "next build",
     "start": "next start",
     "monitor": "cross-env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=460 tsx src/services/copyTradeMonitor.ts",
-    "monitor:dev": "tsx src/services/copyTradeMonitor.ts",
-    "lint": "next lint"
+    "lint": "next lint",
+    "monitor:dev": "tsx watch src/services/autoCompoundMonitor.ts",
+    "monitor:start": "NODE_ENV=production node --max-old-space-size=512 -r tsx/cjs src/services/autoCompoundMonitor.ts",
+    
+    "copy-trade:dev": "tsx watch src/services/copyTradeMonitor-production.ts",
+    "copy-trade:start": "NODE_ENV=production node --max-old-space-size=512 -r tsx/cjs src/services/copyTradeMonitor-production.ts",
+    
+    "services:dev": "concurrently \"npm run monitor:dev\" \"npm run copy-trade:dev\"",
+    "services:start": "concurrently \"npm run monitor:start\" \"npm run copy-trade:start\""
+
   }
 ,
   "dependencies": {
