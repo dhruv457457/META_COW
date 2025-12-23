@@ -2,7 +2,6 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Load environment variables
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
@@ -12,38 +11,60 @@ import CopyTradePermission from "../models/CopyTradePermission";
 import { executeCopyTrade } from "./tradeExecutor";
 import { formatUnits } from "viem";
 
-// Memory optimization: Use Map instead of Set for timestamp-based cleanup
 const processedSwaps = new Map<string, number>();
 const MAX_PROCESSED_SWAPS = 500;
 
-// Performance metrics
+// ✅ NEW: Track pending trades per session account to avoid nonce collisions
+const sessionLocks = new Map<string, Promise<void>>();
+
 const metrics = {
   totalSwapsProcessed: 0,
   totalTradesExecuted: 0,
   totalTradesFailed: 0,
-  totalTradesSkipped: 0, // ✅ New: Track skipped trades
+  totalTradesSkipped: 0,
   lastRunTime: 0,
   errors: [] as { timestamp: Date; error: string; user?: string }[],
   peakMemoryMB: 0,
 };
 
 /**
- * Monitor for new swaps and execute copy trades
- * Production-ready: Handles multiple users, parallel execution, error isolation
+ * Execute trade with session lock to prevent nonce collisions
  */
+async function executeTradeWithLock(
+  sessionAccount: string,
+  executeFn: () => Promise<string>
+): Promise<string> {
+  // Wait for any pending trade on this session account
+  const existingLock = sessionLocks.get(sessionAccount);
+  if (existingLock) {
+    await existingLock;
+  }
+
+  // Create new lock for this session
+  const lockPromise = executeFn();
+  sessionLocks.set(sessionAccount, lockPromise.then(() => {}, () => {}));
+
+  try {
+    const result = await lockPromise;
+    return result;
+  } finally {
+    // Clean up lock after execution
+    if (sessionLocks.get(sessionAccount) === lockPromise.then(() => {}, () => {})) {
+      sessionLocks.delete(sessionAccount);
+    }
+  }
+}
+
 async function monitorSwaps() {
   const startTime = Date.now();
   
   try {
     await dbConnect();
 
-    // 1. Fetch latest swaps from Envio
     const swaps = await fetchLatestSwaps(20);
-    
-    // 2. Get all active permissions (ALL USERS)
     const activePermissions = await CopyTradePermission.find({ 
       isActive: true 
-    }).lean(); // Use lean() for better performance
+    }).lean();
 
     if (activePermissions.length === 0) {
       metrics.lastRunTime = Date.now() - startTime;
@@ -52,21 +73,16 @@ async function monitorSwaps() {
 
     console.log(`📊 Monitoring: ${activePermissions.length} active permissions`);
 
-    // 3. Process swaps in parallel (for better performance)
     const swapPromises = swaps.map(async (swap) => {
       const swapId = `${swap.txHash}-${swap.timestamp}`;
       
-      // Skip if already processed
       if (processedSwaps.has(swapId)) return;
       
-      // Add to processed map with timestamp
       processedSwaps.set(swapId, Date.now());
       metrics.totalSwapsProcessed++;
       
-      // Memory cleanup: Remove old entries when map grows too large
       if (processedSwaps.size > MAX_PROCESSED_SWAPS) {
         const entries = Array.from(processedSwaps.entries());
-        // Sort by timestamp and keep only the most recent half
         entries.sort((a, b) => a[1] - b[1]);
         const toKeep = entries.slice(-Math.floor(MAX_PROCESSED_SWAPS / 2));
         processedSwaps.clear();
@@ -74,7 +90,6 @@ async function monitorSwaps() {
         console.log(`🧹 Cleaned up processed swaps cache (kept ${toKeep.length})`);
       }
       
-      // Find copiers for this specific trader AND token
       const copiers = activePermissions.filter(
         (p) => 
           p.traderAddress.toLowerCase() === swap.user.toLowerCase() &&
@@ -90,17 +105,17 @@ async function monitorSwaps() {
       console.log(`   Token: ${swap.inputToken.slice(0, 10)}...`);
       console.log(`   Copiers: ${copiers.length}`);
 
-      // 4. Execute for each copier IN PARALLEL
+      // ✅ Execute trades sequentially per session account
       const copyPromises = copiers.map(async (permission) => {
         try {
-          // A. Check Expiry
+          // Check Expiry
           if (permission.expiresAt && new Date() > new Date(permission.expiresAt)) {
             console.log(`   ⏰ Permission expired for ${permission.userWallet.slice(0, 8)}...`);
             await CopyTradePermission.findByIdAndUpdate(permission._id, { isActive: false });
             return;
           }
 
-          // B. Check & Reset Daily Limits
+          // Check & Reset Daily Limits
           const dailyLimit = parseFloat(permission.dailyLimit);
           let spentToday = parseFloat(permission.spentToday || "0");
 
@@ -117,9 +132,9 @@ async function monitorSwaps() {
             });
           }
 
-          // C. Calculate Copy Amount
+          // Calculate Copy Amount
           const amountInHuman = parseFloat(formatUnits(BigInt(swap.inputAmount), 18));
-          const copyAmount = amountInHuman * 0.1; // Copy 10% size
+          const copyAmount = amountInHuman * 0.1;
 
           // Validate Limit
           if (spentToday + copyAmount > dailyLimit) {
@@ -128,32 +143,37 @@ async function monitorSwaps() {
             return;
           }
 
-          // D. Execute Trade
+          // ✅ Execute with session lock to prevent nonce collisions
           console.log(`   ⚡ Executing copy for ${permission.userWallet.slice(0, 8)}...`);
           console.log(`      Amount: ${copyAmount.toFixed(4)} (${((copyAmount / dailyLimit) * 100).toFixed(1)}% of daily limit)`);
           
-          const userOpHash = await executeCopyTrade({
-            permission: {
-              userWallet: permission.userWallet,
-              sessionAccount: permission.sessionAccount,
-              permissionsContext: permission.permissionsContext,
-              delegationManager: permission.delegationManager,
-              _id: permission._id,
-            },
-            swap: {
-              user: swap.user,
-              inputToken: swap.inputToken,
-              outputToken: swap.outputToken,
-              inputAmount: swap.inputAmount,
-              txHash: swap.txHash,
-            },
-            amount: copyAmount,
-          });
+          const userOpHash = await executeTradeWithLock(
+            permission.sessionAccount,
+            async () => {
+              return await executeCopyTrade({
+                permission: {
+                  userWallet: permission.userWallet,
+                  sessionAccount: permission.sessionAccount,
+                  permissionsContext: permission.permissionsContext,
+                  delegationManager: permission.delegationManager,
+                  _id: permission._id,
+                },
+                swap: {
+                  user: swap.user,
+                  inputToken: swap.inputToken,
+                  outputToken: swap.outputToken,
+                  inputAmount: swap.inputAmount,
+                  txHash: swap.txHash,
+                },
+                amount: copyAmount,
+              });
+            }
+          );
 
           console.log(`   ✅ Success! UserOp: ${userOpHash}`);
           metrics.totalTradesExecuted++;
 
-          // E. Update DB
+          // Update DB
           const newSpentToday = spentToday + copyAmount;
           await CopyTradePermission.findByIdAndUpdate(permission._id, {
             spentToday: newSpentToday.toString(),
@@ -162,11 +182,9 @@ async function monitorSwaps() {
           console.log(`   📊 Daily spend updated: ${newSpentToday.toFixed(4)}/${dailyLimit}`);
           
         } catch (error: any) {
-          // ✅ Handle pair not found gracefully
           if (error.message === "PAIR_NOT_FOUND") {
             console.log(`   💡 Skipped: Liquidity pair not available for ${permission.userWallet.slice(0, 8)}...`);
             metrics.totalTradesSkipped++;
-            // Don't count as failure - just not available
             return;
           }
           
@@ -180,18 +198,15 @@ async function monitorSwaps() {
             user: permission.userWallet,
           });
 
-          // Keep only last 100 errors
           if (metrics.errors.length > 100) {
             metrics.errors = metrics.errors.slice(-100);
           }
         }
       });
 
-      // Wait for all copy trades for this swap to complete
       await Promise.allSettled(copyPromises);
     });
 
-    // Wait for all swaps to be processed
     await Promise.allSettled(swapPromises);
 
   } catch (error: any) {
@@ -203,24 +218,18 @@ async function monitorSwaps() {
   } finally {
     metrics.lastRunTime = Date.now() - startTime;
     
-    // Track peak memory usage
     const memoryUsage = process.memoryUsage();
     const currentMemoryMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
     if (currentMemoryMB > metrics.peakMemoryMB) {
       metrics.peakMemoryMB = currentMemoryMB;
     }
     
-    // Hint for garbage collection (only if --expose-gc flag is set)
     if (global.gc && processedSwaps.size > 100) {
       global.gc();
     }
   }
 }
 
-/**
- * Start the monitor service
- * Production: Includes health checks and metrics
- */
 async function startMonitor() {
   console.log("🚀 Copy Trade Monitor Started (Production Mode)");
   console.log(`   Node Version: ${process.version}`);
@@ -230,31 +239,26 @@ async function startMonitor() {
   console.log("   Listening for events on Envio...");
   console.log("   Press Ctrl+C to stop\n");
 
-  // Initial run
   await monitorSwaps();
 
-  // Poll every 10 seconds
   const interval = setInterval(monitorSwaps, 10000);
 
-  // Memory monitoring every minute
   const memoryInterval = setInterval(() => {
     const used = process.memoryUsage();
     const mb = (bytes: number) => Math.round(bytes / 1024 / 1024);
     
     console.log(`💾 Memory: Heap ${mb(used.heapUsed)}/${mb(used.heapTotal)}MB | RSS ${mb(used.rss)}MB | External ${mb(used.external)}MB`);
     
-    // Alert if memory is critically high (>400MB on 512MB system)
     if (mb(used.heapUsed) > 400) {
       console.warn('⚠️  HIGH MEMORY WARNING: Consider increasing memory limit or reducing polling frequency');
     }
-  }, 60000); // Every minute
+  }, 60000);
 
-  // Log metrics every 5 minutes
   const metricsInterval = setInterval(() => {
     console.log("\n📊 === Monitor Metrics (Last 5 min) ===");
     console.log(`   Swaps processed: ${metrics.totalSwapsProcessed}`);
     console.log(`   Trades executed: ${metrics.totalTradesExecuted}`);
-    console.log(`   Trades skipped: ${metrics.totalTradesSkipped}`); // ✅ New
+    console.log(`   Trades skipped: ${metrics.totalTradesSkipped}`);
     console.log(`   Trades failed: ${metrics.totalTradesFailed}`);
     console.log(`   Success rate: ${
       metrics.totalTradesExecuted + metrics.totalTradesFailed > 0
@@ -265,10 +269,10 @@ async function startMonitor() {
     console.log(`   Peak memory: ${metrics.peakMemoryMB}MB`);
     console.log(`   Recent errors: ${metrics.errors.length}`);
     console.log(`   Processed cache size: ${processedSwaps.size}`);
+    console.log(`   Active session locks: ${sessionLocks.size}`); // ✅ New
     console.log("=====================================\n");
-  }, 300000); // 5 minutes
+  }, 300000);
 
-  // Graceful shutdown
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
@@ -290,10 +294,6 @@ async function startMonitor() {
   }
 }
 
-/**
- * Production: Health check endpoint
- * Call this from your monitoring service
- */
 export function getMonitorHealth() {
   return {
     status: "running",
@@ -301,11 +301,11 @@ export function getMonitorHealth() {
       ...metrics,
       uptime: process.uptime(),
       memoryUsage: process.memoryUsage(),
+      activeSessionLocks: sessionLocks.size,
     },
   };
 }
 
-// Allow running directly
 if (require.main === module) {
   startMonitor().catch((err) => {
     console.error("💥 Fatal error:", err);

@@ -1,3 +1,4 @@
+// src/app/api/copy-trade/status/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import CopyTradePermission from "@/models/CopyTradePermission";
@@ -9,32 +10,34 @@ export async function GET(req: NextRequest) {
     const traderAddress = searchParams.get("traderAddress");
     const inputToken = searchParams.get("inputToken");
 
-    if (!userAddress || !traderAddress) {
+    if (!userAddress || !traderAddress || !inputToken) {
       return NextResponse.json(
-        { error: "Missing userAddress or traderAddress" },
+        { error: "Missing required parameters" },
         { status: 400 }
       );
     }
 
     await dbConnect();
 
-    // Build query
-    const query: any = {
-      userWallet: userAddress.toLowerCase(),
+    // Check for active permission
+    const permission = await CopyTradePermission.findOne({
+      userWallet: userAddress.toLowerCase(), // This might be smart account OR EOA
       traderAddress: traderAddress.toLowerCase(),
+      inputToken: inputToken.toLowerCase(),
       isActive: true,
-    };
+    });
 
-    // ✅ If inputToken provided, check for that specific token
-    if (inputToken) {
-      query.inputToken = inputToken.toLowerCase();
-    }
-
-    const permission = await CopyTradePermission.findOne(query);
+    // Also check if there's a permission with a different userWallet
+    // (In case user is checking with EOA but permission is saved with smart account)
+    const anyPermission = await CopyTradePermission.findOne({
+      traderAddress: traderAddress.toLowerCase(),
+      inputToken: inputToken.toLowerCase(),
+      isActive: true,
+    });
 
     return NextResponse.json({
-      isEnabled: !!permission,
-      permission: permission || null,
+      isEnabled: !!permission || !!anyPermission,
+      permission: permission || anyPermission || null,
     });
   } catch (error: any) {
     console.error("Status check error:", error);

@@ -21,17 +21,15 @@ import { bscTestnet } from "viem/chains";
 // ✅ Type-safe import for MetaMask Smart Accounts
 import { erc7715ProviderActions } from "@metamask/smart-accounts-kit/actions";
 
+// ✅ Import token list from centralized config
+import { tokenList, type Token } from "@/utils/tokens";
+
 interface CopyTradeButtonProps {
   traderAddress: string;
   traderUsername: string;
   inputToken: string;
   outputToken: string;
   inputAmount: string;
-}
-
-interface TokenInfo {
-  symbol: string;
-  address: Address;
 }
 
 interface SessionAccount {
@@ -62,19 +60,12 @@ interface PermissionRequest {
 }
 
 interface GrantedPermission {
+  address: string;
   context: string;
   signerMeta: {
     delegationManager: string;
   };
 }
-
-// Token list for approvals
-const TOKEN_LIST: TokenInfo[] = [
-  { symbol: "TKA", address: "0xf98101078479e0BAEB77005E3426edaC5a2405C2" },
-  { symbol: "TKB", address: "0x2AaF51745dbf59938fD364F08f06E6d8B34f4b49" },
-  { symbol: "USD", address: "0x021D0f2212ec1869933F4D21ea76dCF9e127396B" },
-  { symbol: "MOC", address: "0xE66b76f47090b76436d11d7F329e7ad0aD7eE9F0" },
-];
 
 const ERC20_ABI = [
   {
@@ -90,8 +81,8 @@ const ERC20_ABI = [
 ] as const;
 
 const getTokenSymbol = (address: string): string => {
-  const token = TOKEN_LIST.find(
-    (t) => t.address.toLowerCase() === address.toLowerCase()
+  const token = tokenList.find(
+    (t:Token) => t.address.toLowerCase() === address.toLowerCase()
   );
   return token?.symbol || `${address.slice(0, 6)}...`;
 };
@@ -264,8 +255,83 @@ export default function CopyTradeButton({
         throw new Error("Permission request denied or failed");
       }
 
-      // --- STEP D: Save to Database ---
+      toast.dismiss("permission");
+
+      // --- STEP D: Deploy User's Smart Account (if not deployed) ---
+      console.log("\n=== STEP 4: Ensuring Smart Account is Deployed ===");
       const permissionData: GrantedPermission = grantedPermissions[0];
+      const userSmartAccountAddress = permissionData.address;
+
+      if (!isValidAddress(userSmartAccountAddress)) {
+        throw new Error("Invalid smart account address from permission");
+      }
+
+      console.log("User's Smart Account:", userSmartAccountAddress);
+      toast.loading("Checking smart account deployment...", { id: "check-deploy" });
+
+      try {
+        // Check if the smart account is already deployed
+        const bytecode = await publicClient.getBytecode({ 
+          address: userSmartAccountAddress as Address 
+        });
+
+        if (!bytecode || bytecode === '0x') {
+          console.log("⚠️  Smart account not deployed yet, deploying now...");
+          toast.loading("Deploying your smart account (one-time setup)...", { id: "deploy" });
+          
+          // Deploy by sending a minimal transaction to the smart account
+          // This triggers the ERC-4337 factory to deploy it
+          try {
+            const deployHash = await baseWalletClient.sendTransaction({
+              account: address,
+              to: userSmartAccountAddress as Address,
+              value: 1n, // Send 1 wei to trigger deployment
+              data: '0x',
+            });
+
+            console.log("Deploy transaction submitted:", deployHash);
+            
+            // Wait for deployment with 2 confirmations
+            const deployReceipt = await publicClient.waitForTransactionReceipt({ 
+              hash: deployHash,
+              confirmations: 2,
+            });
+            
+            console.log("✅ Smart account deployed successfully!");
+            console.log("Deploy receipt:", deployReceipt);
+            toast.success("Smart account deployed!");
+          } catch (deployError) {
+            console.error("Deployment transaction failed:", deployError);
+            // Try alternative: just wait a bit and check again
+            console.log("Waiting 5 seconds and checking again...");
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            const recheckBytecode = await publicClient.getBytecode({ 
+              address: userSmartAccountAddress as Address 
+            });
+            
+            if (!recheckBytecode || recheckBytecode === '0x') {
+              throw new Error("Smart account deployment failed. Please try again or contact support.");
+            }
+            
+            console.log("✅ Smart account appears to be deployed now");
+          }
+        } else {
+          console.log("✅ Smart account already deployed");
+          toast.success("Smart account ready!");
+        }
+      } catch (deployCheckErr: any) {
+        console.error("Deployment check/deploy failed:", deployCheckErr);
+        toast.error("Smart account deployment failed. Please try again.");
+        throw deployCheckErr;
+      } finally {
+        toast.dismiss("check-deploy");
+        toast.dismiss("deploy");
+      }
+
+      // --- STEP E: Save to Database ---
+      console.log("\n=== STEP 5: Saving permission to database ===");
+      toast.loading("Saving permission...", { id: "save" });
       
       const permissionToSave = {
         permissionsContext: permissionData.context,
@@ -277,10 +343,10 @@ export default function CopyTradeButton({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userAddress: address,
+          userAddress: userSmartAccountAddress, // ✅ Use smart account address, not EOA
           traderAddress,
           traderUsername,
-          inputToken, // ✅ NEW: Pass the token address
+          inputToken,
           permission: permissionToSave,
           dailyLimit,
           sessionAccount: sessionAccount.address,
@@ -292,6 +358,7 @@ export default function CopyTradeButton({
         throw new Error(errorData.error || "Failed to save permission");
       }
 
+      toast.dismiss("save");
       toast.success(`🎉 Now auto-copying ${traderUsername}!`);
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
       setShowModal(false);
@@ -306,7 +373,11 @@ export default function CopyTradeButton({
       }
     } finally {
       setLoading(false);
+      toast.dismiss("approval");
       toast.dismiss("permission");
+      toast.dismiss("check-deploy");
+      toast.dismiss("deploy");
+      toast.dismiss("save");
     }
   };
 
@@ -320,7 +391,7 @@ export default function CopyTradeButton({
         body: JSON.stringify({ 
           userAddress: address, 
           traderAddress,
-          inputToken // ✅ NEW: Pass token to disable specific permission
+          inputToken
         }),
       });
       if (!res.ok) {
@@ -447,7 +518,7 @@ export default function CopyTradeButton({
                 disabled={loading || !dailyLimit || parseFloat(dailyLimit) <= 0}
                 className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
-                {loading ? "Check Wallet..." : "Confirm & Sign"}
+                {loading ? "Setting up..." : "Confirm & Sign"}
               </button>
             </div>
           </div>

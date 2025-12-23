@@ -1,10 +1,10 @@
-// src/services/tradeExecutor.ts (Memory optimized with pair validation)
+// src/services/tradeExecutor.ts (Memory optimized with pair validation + nonce management)
 import { bundlerClient, publicClient } from "../lib/smartAccounts/bundlerClient";
 import { encodeFunctionData, parseUnits, type Address } from "viem";
 import dbConnect from "../lib/dbConnect";
 import CopyTradePermission from "../models/CopyTradePermission";
 import CopyTrade from "../models/CopyTrade";
-import { createSessionAccount } from "../lib/smartAccounts/sessionAccount";
+import { createSessionAccountFromAddress } from "../lib/smartAccounts/sessionAccount";
 
 // --- Constants ---
 
@@ -112,6 +112,35 @@ function toAddress(address: string): Address {
   return address;
 }
 
+/**
+ * ✅ Get current nonce for smart account from EntryPoint
+ */
+async function getNonceForAccount(address: Address, entryPoint: Address): Promise<bigint> {
+  try {
+    const nonce = await publicClient.readContract({
+      address: entryPoint,
+      abi: [
+        {
+          inputs: [
+            { name: "sender", type: "address" },
+            { name: "key", type: "uint192" }
+          ],
+          name: "getNonce",
+          outputs: [{ name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        }
+      ],
+      functionName: "getNonce",
+      args: [address, 0n], // key = 0 for default nonce sequence
+    });
+    return nonce as bigint;
+  } catch (error) {
+    console.warn("   ⚠️ Could not fetch nonce from EntryPoint, using default 0");
+    return 0n;
+  }
+}
+
 // --- Main Function ---
 
 export async function executeCopyTrade({
@@ -125,8 +154,11 @@ export async function executeCopyTrade({
   try {
     await dbConnect();
 
-    // 1. Recover the Session Account
-    const { account: sessionAccount } = await createSessionAccount();
+    // ✅ 1. Get THIS USER'S specific session account from database
+    const { account: sessionAccount } = await createSessionAccountFromAddress(
+      permission.sessionAccount
+    );
+    
     console.log(`   Acting as Session: ${sessionAccount.address}`);
 
     // Validate addresses
@@ -134,8 +166,7 @@ export async function executeCopyTrade({
     const outputToken = toAddress(swap.outputToken);
     const userWallet = toAddress(permission.userWallet);
     
-    // ✅ Support both DEX_ROUTER_ADDRESS and NEXT_PUBLIC_DEX_ROUTER_ADDRESS
-const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
+    const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
     if (!factoryAddress || !isValidAddress(factoryAddress)) {
       throw new Error("Invalid or missing DEX_ROUTER_ADDRESS in environment");
     }
@@ -162,7 +193,6 @@ const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
       if (error.message === "PAIR_NOT_FOUND") {
         throw error;
       }
-      // Contract reverted - pair doesn't exist
       console.warn(`   ⚠️  Liquidity pair does not exist (contract reverted)`);
       console.warn(`      Input: ${inputToken.slice(0, 10)}...`);
       console.warn(`      Output: ${outputToken.slice(0, 10)}...`);
@@ -181,7 +211,6 @@ const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
     console.log(`      3️⃣  Execute swap: Session swaps`);
     console.log(`      4️⃣  Return tokens: Session → User`);
 
-    // ✅ Support both ENTRYPOINT_ADDRESS and NEXT_PUBLIC_ENTRYPOINT_ADDRESS
     const entryPointAddress = (
       process.env.ENTRYPOINT_ADDRESS || 
       process.env.NEXT_PUBLIC_ENTRYPOINT_ADDRESS || 
@@ -207,11 +236,16 @@ const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
 
     console.log(`   1️⃣  Delegated transfer (user → session)...`);
 
+    // ✅ Fetch current nonce for transfer
+    const transferNonce = await getNonceForAccount(sessionAccount.address, entryPointAddress);
+    console.log(`   🔢 Current nonce for transfer: ${transferNonce}`);
+
     const transferUserOpHash = await bundlerClient.sendUserOperationWithDelegation({
       account: sessionAccount,
       calls: [delegatedTransferCall],
       publicClient,
       entryPointAddress,
+      nonce: transferNonce, // ✅ Explicitly set nonce
       maxFeePerGas: 3000000000n,
       maxPriorityFeePerGas: 2000000000n,
     });
@@ -245,6 +279,10 @@ const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
       args: [amountIn, inputToken],
     });
 
+    // ✅ Fetch current nonce for swap
+    const swapNonce = await getNonceForAccount(sessionAccount.address, entryPointAddress);
+    console.log(`   🔢 Current nonce for swap: ${swapNonce}`);
+
     const swapUserOpHash = await bundlerClient.sendUserOperation({
       account: sessionAccount,
       calls: [
@@ -252,6 +290,7 @@ const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
         { to: pair, data: swapCallData },
       ],
       entryPointAddress,
+      nonce: swapNonce, // ✅ Explicitly set nonce
       maxFeePerGas: 3000000000n,
       maxPriorityFeePerGas: 2000000000n,
     });
@@ -276,7 +315,6 @@ const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
     console.log(`   4️⃣  Returning output tokens to user...`);
 
     try {
-      // Get session's balance of output token
       const outputBalance = await publicClient.readContract({
         address: outputToken,
         abi: ERC20_ABI,
@@ -293,10 +331,15 @@ const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
           args: [userWallet, outputBalance],
         });
 
+        // ✅ Fetch current nonce for return
+        const returnNonce = await getNonceForAccount(sessionAccount.address, entryPointAddress);
+        console.log(`   🔢 Current nonce for return: ${returnNonce}`);
+
         const returnUserOpHash = await bundlerClient.sendUserOperation({
           account: sessionAccount,
           calls: [{ to: outputToken, data: returnCallData }],
           entryPointAddress,
+          nonce: returnNonce, // ✅ Explicitly set nonce
           maxFeePerGas: 3000000000n,
           maxPriorityFeePerGas: 2000000000n,
         });
@@ -317,7 +360,6 @@ const factoryAddress = process.env.NEXT_PUBLIC_DEX_ROUTER_ADDRESS;
       }
     } catch (e) {
       console.error("   ❌ Failed to return output tokens:", e);
-      // Continue anyway - we'll save what we have
     }
 
     console.log(`   🔗 https://testnet.bscscan.com/tx/${swapTxHash || transferUserOpHash}`);

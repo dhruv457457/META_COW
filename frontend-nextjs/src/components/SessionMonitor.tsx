@@ -1,27 +1,27 @@
+// src/components/SessionMonitor.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useWallet } from "@/context/WalletContext";
-import { toast } from "react-hot-toast";
-
-interface Permission {
-  id: string;
-  traderAddress: string;
-  traderUsername: string;
-  inputToken: string;
-  dailyLimit: string;
-  spentToday: string;
-  isActive: boolean;
-  expiresAt: string;
-  createdAt: string;
-}
+import Link from "next/link";
 
 interface SessionData {
   session: {
-    address: string;
+    smartAccountAddress: string;
+    eoaAddress: string;
     createdAt: string;
   } | null;
-  permissions: Permission[];
+  permissions: Array<{
+    id: string;
+    traderAddress: string;
+    traderUsername: string;
+    inputToken: string;
+    dailyLimit: string;
+    spentToday: string;
+    isActive: boolean;
+    expiresAt?: string;
+    createdAt: string;
+  }>;
   stats: {
     totalPermissions: number;
     activePermissions: number;
@@ -30,195 +30,220 @@ interface SessionData {
   };
 }
 
-const formatAddress = (addr: string) => `${addr.slice(0, 8)}...${addr.slice(-6)}`;
-
-const formatDate = (date: string) => {
-  return new Date(date).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-};
-
 export default function SessionMonitor() {
-  const { address, isConnected } = useWallet();
-  const [sessionData, setSessionData] = useState<SessionData | null>(null);
+  const { address } = useWallet();
+  const [data, setData] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(false);
-  
-  const loadSessionData = async () => {
-    if (!address) return;
-    
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/sessions/list?userWallet=${address}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSessionData(data);
-      } else {
-        throw new Error("Failed to fetch session data");
-      }
-    } catch (error) {
-      console.error("Failed to load session data:", error);
-      toast.error("Failed to load session account data");
-    } finally {
-      setLoading(false);
-    }
-  };
-  
+
   useEffect(() => {
-    if (isConnected && address) {
-      loadSessionData();
-    }
-  }, [address, isConnected]);
-  
-  if (!isConnected) {
-    return null;
-  }
-  
+    const fetchSessionData = async () => {
+      if (!address) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/sessions/list?userWallet=${address}`);
+        if (res.ok) {
+          const json = await res.json();
+          setData(json);
+        }
+      } catch (err) {
+        console.error("Failed to fetch session data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSessionData();
+    
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchSessionData, 30000);
+    return () => clearInterval(interval);
+  }, [address]);
+
+  const formatAddress = (addr: string) => {
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div className="animate-pulse">
-          <div className="h-6 bg-gray-200 rounded w-1/2 mb-4"></div>
-          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <div className="flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
         </div>
       </div>
     );
   }
-  
-  if (!sessionData?.session) {
+
+  if (!data?.session) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
-            <span className="text-2xl">🤖</span>
-          </div>
-          <div>
-            <h3 className="font-bold text-gray-900">Smart Account Agent</h3>
-            <p className="text-sm text-gray-500">No session account yet</p>
-          </div>
+      <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl shadow-sm border border-purple-100 p-8">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🤖</div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            Smart Account Agent
+          </h3>
+          <p className="text-gray-600 mb-6">
+            No session account yet
+          </p>
+          <p className="text-sm text-gray-500 mb-6">
+            Set up auto-copy trading to create your session account.
+          </p>
+          <Link
+            href="/copy-trade"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg transition-all"
+          >
+            <span>🚀</span> Create Session Account
+          </Link>
         </div>
-        <p className="text-sm text-gray-600 mb-4">
-          Set up auto-copy trading to create your session account.
-        </p>
       </div>
     );
   }
-  
-  const { session, permissions, stats } = sessionData;
-  
+
+  // ✅ FIX: Extract session into a constant to narrow the type
+  const session = data.session;
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      {/* Header */}
-      <div className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 border-b border-purple-100">
-        <div className="flex items-center justify-between mb-4">
+    <div className="space-y-4">
+      {/* Session Account Card */}
+      <div className="bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 rounded-2xl shadow-sm border border-purple-100 p-6">
+        <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center shadow-lg">
+            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
               <span className="text-2xl">🤖</span>
             </div>
             <div>
-              <h3 className="font-bold text-gray-900">Smart Account Agent</h3>
-              <p className="text-sm text-gray-600">Automated copy trading</p>
+              <h3 className="text-lg font-bold text-gray-900">
+                Smart Account Agent
+              </h3>
+              <p className="text-sm text-gray-600">Active & Trading</p>
             </div>
           </div>
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="p-2 hover:bg-white/50 rounded-lg transition"
-          >
-            <span className="text-xl">{expanded ? "▼" : "▶"}</span>
-          </button>
+          <div className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+            ● ACTIVE
+          </div>
         </div>
-        
-        {/* Session Address */}
-        <div className="bg-white rounded-lg p-3 font-mono text-sm">
-          <div className="text-xs text-gray-600 mb-1">Session Account</div>
-          <div className="text-purple-700 font-bold break-all">
-            {session.address}
+
+        <div className="space-y-3">
+          {/* Smart Account Address */}
+          <div className="bg-white rounded-xl p-4">
+            <div className="text-xs text-gray-500 mb-1 font-semibold">SMART ACCOUNT</div>
+            <div className="flex items-center justify-between">
+              <code className="text-sm font-mono text-purple-700">
+                {formatAddress(session.smartAccountAddress)}
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(session.smartAccountAddress);
+                }}
+                className="text-gray-400 hover:text-purple-600 transition"
+                title="Copy address"
+              >
+                📋
+              </button>
+            </div>
+          </div>
+
+          {/* EOA Address */}
+          <div className="bg-white rounded-xl p-4">
+            <div className="text-xs text-gray-500 mb-1 font-semibold">SIGNER (EOA)</div>
+            <div className="flex items-center justify-between">
+              <code className="text-sm font-mono text-blue-700">
+                {formatAddress(session.eoaAddress)}
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(session.eoaAddress);
+                }}
+                className="text-gray-400 hover:text-blue-600 transition"
+                title="Copy address"
+              >
+                📋
+              </button>
+            </div>
+          </div>
+
+          {/* Created Date */}
+          <div className="text-center pt-2">
+            <p className="text-xs text-gray-500">
+              Created {new Date(session.createdAt).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+              })}
+            </p>
           </div>
         </div>
       </div>
-      
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-4 p-6 bg-gray-50">
-        <div>
-          <div className="text-2xl font-bold text-purple-600">{stats.activePermissions}</div>
-          <div className="text-xs text-gray-600">Active Permissions</div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <div className="text-2xl font-bold text-purple-600">
+            {data.stats.activePermissions}
+          </div>
+          <div className="text-sm text-gray-600">Active Traders</div>
         </div>
-        <div>
-          <div className="text-2xl font-bold text-green-600">{stats.totalTrades}</div>
-          <div className="text-xs text-gray-600">Total Trades</div>
-        </div>
-        <div className="col-span-2">
-          <div className="text-2xl font-bold text-blue-600">{stats.totalVolume}</div>
-          <div className="text-xs text-gray-600">Total Volume (tokens)</div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <div className="text-2xl font-bold text-green-600">
+            {data.stats.totalTrades}
+          </div>
+          <div className="text-sm text-gray-600">Copy Trades</div>
         </div>
       </div>
-      
-      {/* Permissions List (Expandable) */}
-      {expanded && permissions.length > 0 && (
-        <div className="border-t border-gray-100">
-          <div className="p-4 bg-gray-50 border-b border-gray-100">
-            <h4 className="font-bold text-gray-900 text-sm">Active Permissions</h4>
-          </div>
+
+      {/* Active Permissions */}
+      {data.permissions.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <span>👥</span> Following ({data.stats.activePermissions})
+          </h4>
           
-          <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
-            {permissions.map((permission) => {
-              const spentPercent = (parseFloat(permission.spentToday) / parseFloat(permission.dailyLimit)) * 100;
-              
-              return (
-                <div key={permission.id} className="p-4 hover:bg-gray-50 transition">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="font-bold text-gray-900">
-                      {permission.traderUsername}
-                    </div>
-                    <div className={`text-xs font-bold px-2 py-1 rounded ${
-                      permission.isActive 
-                        ? 'bg-green-100 text-green-700' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {permission.isActive ? 'Active' : 'Inactive'}
-                    </div>
+          <div className="space-y-2">
+            {data.permissions.slice(0, 3).map((perm) => (
+              <div 
+                key={perm.id} 
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+              >
+                <div>
+                  <div className="font-semibold text-sm text-gray-900">
+                    {perm.traderUsername || formatAddress(perm.traderAddress)}
                   </div>
-                  
-                  <div className="text-xs text-gray-600 space-y-1">
-                    <div>Trader: {formatAddress(permission.traderAddress)}</div>
-                    <div>Created: {formatDate(permission.createdAt)}</div>
-                    <div>Expires: {formatDate(permission.expiresAt)}</div>
-                  </div>
-                  
-                  {/* Daily Limit Progress */}
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-gray-600">Daily Spend</span>
-                      <span className="font-bold text-gray-900">
-                        {permission.spentToday} / {permission.dailyLimit}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div 
-                        className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${Math.min(spentPercent, 100)}%` }}
-                      />
-                    </div>
+                  <div className="text-xs text-gray-500">
+                    {parseFloat(perm.spentToday || "0").toFixed(2)} / {perm.dailyLimit} daily
                   </div>
                 </div>
-              );
-            })}
+                <div className={`px-2 py-1 rounded-full text-xs font-bold ${
+                  perm.isActive 
+                    ? 'bg-green-100 text-green-700' 
+                    : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {perm.isActive ? '● ON' : '○ OFF'}
+                </div>
+              </div>
+            ))}
           </div>
+
+          {data.permissions.length > 3 && (
+            <Link
+              href="/copy-trade"
+              className="block text-center text-sm text-purple-600 hover:text-purple-700 font-semibold mt-3"
+            >
+              View all {data.permissions.length} →
+            </Link>
+          )}
         </div>
       )}
-      
-      {/* Footer Info */}
-      <div className="p-4 bg-gray-50 border-t border-gray-100">
-        <div className="flex items-start gap-2 text-xs text-gray-600">
-          <span>ℹ️</span>
-          <p>
-            Your session account executes trades on your behalf using granted permissions. 
-            You maintain full control and can revoke access anytime.
-          </p>
-        </div>
-      </div>
+
+      {/* Action Button */}
+      <Link
+        href="/copy-trade"
+        className="block w-full text-center px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg transition-all"
+      >
+        Manage Auto-Copy Trading →
+      </Link>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+// src/app/api/sessions/list/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Session from "@/models/Session";
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
     
     const walletLower = userWallet.toLowerCase();
     
-    // Get user's session
+    // ✅ Query by userAddress (not address!)
     const session = await Session.findOne({ userAddress: walletLower });
     
     if (!session) {
@@ -37,9 +38,9 @@ export async function GET(req: NextRequest) {
       });
     }
     
-    // Get permissions using this session
+    // ✅ Use smartAccountAddress for permissions lookup
     const permissions = await CopyTradePermission.find({ 
-      sessionAccount: session.address.toLowerCase(),
+      sessionAccount: session.smartAccountAddress.toLowerCase(),
       userWallet: walletLower
     }).lean();
     
@@ -61,7 +62,8 @@ export async function GET(req: NextRequest) {
     
     return NextResponse.json({
       session: {
-        address: session.address,
+        smartAccountAddress: session.smartAccountAddress, // ✅ Return smart account address
+        eoaAddress: session.eoaAddress, // ✅ Also return EOA for reference
         createdAt: session.createdAt,
       },
       permissions: permissions.map(p => ({
