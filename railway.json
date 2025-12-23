@@ -1,11 +1,12 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
+  "rootDirectory": "frontend-nextjs",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "cd frontend-nextjs && npm install"
+    "buildCommand": "npm run build"
   },
   "deploy": {
-    "startCommand": "cd frontend-nextjs && npm run monitor",
+    "startCommand": "npm run monitor",
     "runtime": "V2",
     "numReplicas": 1,
     "sleepApplication": false,
