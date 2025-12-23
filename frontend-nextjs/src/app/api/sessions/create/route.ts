@@ -1,4 +1,3 @@
-// src/app/api/sessions/create/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { generatePrivateKey, privateKeyToAddress } from "viem/accounts";
 import { privateKeyToAccount } from "viem/accounts";
@@ -21,31 +20,27 @@ export async function POST(req: NextRequest) {
 
     await dbConnect();
 
-    // Check if session already exists
+    // Check if session already exists for this user
     const existingSession = await Session.findOne({
       userAddress: userAddress.toLowerCase(),
     });
 
     if (existingSession) {
       console.log(`✅ Existing session for ${userAddress}`);
-      console.log(`   EOA: ${existingSession.eoaAddress}`);
-      console.log(`   Smart Account: ${existingSession.smartAccountAddress}`);
       return NextResponse.json({
         sessionAccount: {
-          address: existingSession.smartAccountAddress, // Return smart account address!
+          address: existingSession.smartAccountAddress,
         },
       });
     }
 
-    // Generate new private key
+    // Generate new private key for the session
     const privateKey = generatePrivateKey();
     const eoaAddress = privateKeyToAddress(privateKey);
 
     console.log(`📝 Creating session for ${userAddress}`);
-    console.log(`   Generated EOA: ${eoaAddress}`);
-    console.log(`   Private Key Length: ${privateKey.length}`);
 
-    // Create public client for smart account creation
+    // Create public client for smart account address calculation
     const publicClient = createPublicClient({
       chain: bscTestnet,
       transport: http("https://data-seed-prebsc-1-s1.binance.org:8545/"),
@@ -54,7 +49,7 @@ export async function POST(req: NextRequest) {
     // Create signer from private key
     const signer = privateKeyToAccount(privateKey);
 
-    // Create MetaMask Smart Account
+    // Calculate MetaMask Smart Account Address (Deterministic)
     const smartAccount = await toMetaMaskSmartAccount({
       client: publicClient,
       implementation: Implementation.Hybrid,
@@ -63,52 +58,44 @@ export async function POST(req: NextRequest) {
       signer: { account: signer },
     });
 
-    console.log(`   Smart Account: ${smartAccount.address}`);
+    console.log(`   Smart Account: ${smartAccount.address}`);
 
     // Save to database
+    // 🔴 FIX: Explicitly set 'address' to match the smart account address
+    // This prevents the "dup key: { address: null }" error in MongoDB
     const newSession = await Session.create({
       userAddress: userAddress.toLowerCase(),
       eoaAddress: eoaAddress.toLowerCase(),
       smartAccountAddress: smartAccount.address.toLowerCase(),
+      address: smartAccount.address.toLowerCase(), // ✅ Added this critical field
       privateKey,
+      isActive: true,
       createdAt: new Date(),
     });
 
-    console.log(`🎉 Session saved to DB:`);
-    console.log(`   ID: ${newSession._id}`);
-    console.log(`   User: ${userAddress}`);
-    console.log(`   EOA: ${eoaAddress}`);
-    console.log(`   Smart Account: ${smartAccount.address}`);
-
-    // Verify
-    const verify = await Session.findById(newSession._id);
-    console.log(`🔍 Verified - Has private key: ${!!verify?.privateKey}`);
+    console.log(`🎉 Session saved to DB: ${newSession._id}`);
 
     return NextResponse.json({
       sessionAccount: {
-        address: smartAccount.address, // Return smart account address!
+        address: smartAccount.address,
       },
     });
 
   } catch (error: any) {
     console.error("❌ Create session error:", error);
     
+    // Handle race conditions (duplicate key error) gracefully
     if (error.code === 11000) {
       try {
         const body = await req.clone().json();
-        const existingSession = await Session.findOne({
-          userAddress: body.userAddress.toLowerCase(),
-        });
-        
-        if (existingSession) {
+        const existing = await Session.findOne({ userAddress: body.userAddress.toLowerCase() });
+        if (existing) {
           return NextResponse.json({
-            sessionAccount: {
-              address: existingSession.smartAccountAddress,
-            },
+            sessionAccount: { address: existing.smartAccountAddress },
           });
         }
-      } catch (retryError) {
-        console.error("Failed to handle duplicate:", retryError);
+      } catch (e) {
+        console.error("Retry failed:", e);
       }
     }
     
