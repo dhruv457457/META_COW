@@ -14,7 +14,6 @@ import { formatUnits } from "viem";
 const processedSwaps = new Map<string, number>();
 const MAX_PROCESSED_SWAPS = 500;
 
-// ✅ Track pending trades per session account to avoid nonce collisions
 const sessionLocks = new Map<string, Promise<void>>();
 
 const metrics = {
@@ -27,20 +26,15 @@ const metrics = {
   peakMemoryMB: 0,
 };
 
-/**
- * Execute trade with session lock to prevent nonce collisions
- */
 async function executeTradeWithLock(
   sessionAccount: string,
   executeFn: () => Promise<string>
 ): Promise<string> {
-  // Wait for any pending trade on this session account
   const existingLock = sessionLocks.get(sessionAccount);
   if (existingLock) {
     await existingLock;
   }
 
-  // Create new lock for this session
   const lockPromise = executeFn();
   sessionLocks.set(sessionAccount, lockPromise.then(() => {}, () => {}));
 
@@ -48,7 +42,6 @@ async function executeTradeWithLock(
     const result = await lockPromise;
     return result;
   } finally {
-    // Clean up lock after execution
     if (sessionLocks.get(sessionAccount) === lockPromise.then(() => {}, () => {})) {
       sessionLocks.delete(sessionAccount);
     }
@@ -61,20 +54,21 @@ async function monitorSwaps() {
   try {
     await dbConnect();
 
-    // ✅ FIX: Fetch active permissions on EVERY cycle (not cached)
     const activePermissions = await CopyTradePermission.find({ 
       isActive: true 
     }).lean();
 
+    console.log(`\n📊 Monitoring: ${activePermissions.length} active permissions`);
+    activePermissions.forEach((p, i) => {
+      console.log(`   ${i + 1}. User: ${p.userWallet.slice(0, 8)}... | Trader: ${p.traderAddress.slice(0, 8)}... | Token: ${p.inputToken?.slice(0, 8)}...`);
+    });
+
     if (activePermissions.length === 0) {
-      console.log(`📊 Monitoring: 0 active permissions (waiting for setup)`);
+      console.log(`   ⚠️  No active permissions found (waiting for setup)`);
       metrics.lastRunTime = Date.now() - startTime;
       return;
     }
 
-    console.log(`📊 Monitoring: ${activePermissions.length} active permissions`);
-
-    // Fetch latest swaps
     const swaps = await fetchLatestSwaps(20);
 
     const swapPromises = swaps.map(async (swap) => {
@@ -94,7 +88,10 @@ async function monitorSwaps() {
         console.log(`🧹 Cleaned up processed swaps cache (kept ${toKeep.length})`);
       }
       
-      // ✅ Match permissions with current swap
+      console.log(`\n🔍 Checking swap:`);
+      console.log(`   Trader: ${swap.user.slice(0, 8)}...`);
+      console.log(`   Token: ${swap.inputToken.slice(0, 8)}...`);
+      
       const copiers = activePermissions.filter(
         (p) => 
           p.traderAddress.toLowerCase() === swap.user.toLowerCase() &&
@@ -102,6 +99,15 @@ async function monitorSwaps() {
       );
 
       if (copiers.length === 0) {
+        console.log(`   ❌ No copiers matched this swap`);
+        console.log(`   Checking each permission:`);
+        activePermissions.forEach((p, i) => {
+          const traderMatch = p.traderAddress.toLowerCase() === swap.user.toLowerCase();
+          const tokenMatch = p.inputToken?.toLowerCase() === swap.inputToken.toLowerCase();
+          console.log(`      Permission ${i + 1}:`);
+          console.log(`         Trader match: ${traderMatch} (${p.traderAddress.slice(0, 8)}... vs ${swap.user.slice(0, 8)}...)`);
+          console.log(`         Token match: ${tokenMatch} (${p.inputToken?.slice(0, 8)}... vs ${swap.inputToken.slice(0, 8)}...)`);
+        });
         return;
       }
 
@@ -110,7 +116,7 @@ async function monitorSwaps() {
       console.log(`   Token: ${swap.inputToken.slice(0, 10)}...`);
       console.log(`   Copiers: ${copiers.length}`);
 
-      // ✅ Execute trades sequentially per session account
+      // ✅ EXECUTE TRADES FOR EACH COPIER
       const copyPromises = copiers.map(async (permission) => {
         try {
           // Check Expiry
@@ -148,7 +154,7 @@ async function monitorSwaps() {
             return;
           }
 
-          // ✅ Execute with session lock to prevent nonce collisions
+          // ✅ Execute with session lock
           console.log(`   ⚡ Executing copy for ${permission.userWallet.slice(0, 8)}...`);
           console.log(`      Amount: ${copyAmount.toFixed(4)} (${((copyAmount / dailyLimit) * 100).toFixed(1)}% of daily limit)`);
           
