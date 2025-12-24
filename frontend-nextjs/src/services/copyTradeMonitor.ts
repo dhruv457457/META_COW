@@ -14,7 +14,7 @@ import { formatUnits } from "viem";
 const processedSwaps = new Map<string, number>();
 const MAX_PROCESSED_SWAPS = 500;
 
-// ✅ NEW: Track pending trades per session account to avoid nonce collisions
+// ✅ Track pending trades per session account to avoid nonce collisions
 const sessionLocks = new Map<string, Promise<void>>();
 
 const metrics = {
@@ -61,17 +61,21 @@ async function monitorSwaps() {
   try {
     await dbConnect();
 
-    const swaps = await fetchLatestSwaps(20);
+    // ✅ FIX: Fetch active permissions on EVERY cycle (not cached)
     const activePermissions = await CopyTradePermission.find({ 
       isActive: true 
     }).lean();
 
     if (activePermissions.length === 0) {
+      console.log(`📊 Monitoring: 0 active permissions (waiting for setup)`);
       metrics.lastRunTime = Date.now() - startTime;
       return;
     }
 
     console.log(`📊 Monitoring: ${activePermissions.length} active permissions`);
+
+    // Fetch latest swaps
+    const swaps = await fetchLatestSwaps(20);
 
     const swapPromises = swaps.map(async (swap) => {
       const swapId = `${swap.txHash}-${swap.timestamp}`;
@@ -90,6 +94,7 @@ async function monitorSwaps() {
         console.log(`🧹 Cleaned up processed swaps cache (kept ${toKeep.length})`);
       }
       
+      // ✅ Match permissions with current swap
       const copiers = activePermissions.filter(
         (p) => 
           p.traderAddress.toLowerCase() === swap.user.toLowerCase() &&
@@ -269,7 +274,7 @@ async function startMonitor() {
     console.log(`   Peak memory: ${metrics.peakMemoryMB}MB`);
     console.log(`   Recent errors: ${metrics.errors.length}`);
     console.log(`   Processed cache size: ${processedSwaps.size}`);
-    console.log(`   Active session locks: ${sessionLocks.size}`); // ✅ New
+    console.log(`   Active session locks: ${sessionLocks.size}`);
     console.log("=====================================\n");
   }, 300000);
 
