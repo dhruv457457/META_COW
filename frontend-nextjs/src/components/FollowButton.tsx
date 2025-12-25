@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@/context/WalletContext";
 import { toast } from "react-hot-toast";
+import { UserPlus, UserCheck, X } from "lucide-react";
 
 interface FollowButtonProps {
   targetWallet: string;
@@ -22,10 +23,8 @@ export default function FollowButton({
   const [loading, setLoading] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(true);
   
-  // Don't show button for own profile
   const isOwnProfile = address && targetWallet.toLowerCase() === address.toLowerCase();
   
-  // Check if already following
   useEffect(() => {
     const checkFollowStatus = async () => {
       if (!address || isOwnProfile) {
@@ -34,14 +33,35 @@ export default function FollowButton({
       }
       
       try {
-        const res = await fetch(`/api/users/profile?wallet=${address}`);
+        // Force a fresh fetch without cache
+        const res = await fetch(`/api/users/profile?wallet=${address}&t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          }
+        });
+        
         if (res.ok) {
           const userData = await res.json();
-          const following = userData.following || [];
-          setIsFollowing(following.includes(targetWallet.toLowerCase()));
+          // Check both followingList (new) and following (old) for backward compatibility
+          const following = Array.isArray(userData.followingList) 
+            ? userData.followingList 
+            : Array.isArray(userData.following) 
+            ? userData.following 
+            : [];
+          
+          // Check if currently following this target
+          const isCurrentlyFollowing = following.some(
+            (addr: string) => addr.toLowerCase() === targetWallet.toLowerCase()
+          );
+          setIsFollowing(isCurrentlyFollowing);
+        } else if (res.status === 404) {
+          // User doesn't exist yet, so not following
+          setIsFollowing(false);
         }
       } catch (error) {
         console.error("Failed to check follow status:", error);
+        setIsFollowing(false);
       } finally {
         setCheckingStatus(false);
       }
@@ -59,7 +79,6 @@ export default function FollowButton({
     setLoading(true);
     try {
       if (isFollowing) {
-        // Unfollow
         const res = await fetch(
           `/api/users/follow?followerWallet=${address}&targetWallet=${targetWallet}`,
           { method: "DELETE" }
@@ -75,7 +94,6 @@ export default function FollowButton({
         onFollowChange?.(false);
         
       } else {
-        // Follow
         const res = await fetch("/api/users/follow", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -90,10 +108,43 @@ export default function FollowButton({
           throw new Error(error.error || "Failed to follow");
         }
         
+        const data = await res.json();
         setIsFollowing(true);
-        toast.success(`Now following ${targetUsername} ✨`);
         onFollowChange?.(true);
+        
+        if (data.alreadyFollowing) {
+          toast.success(`Already following ${targetUsername}`);
+        } else {
+          toast.success(`Now following ${targetUsername} ✨`);
+        }
       }
+      
+      // Refetch status to ensure UI is in sync
+      setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/users/profile?wallet=${address}&t=${Date.now()}`, {
+            cache: 'no-store',
+          });
+          if (res.ok) {
+            const userData = await res.json();
+            // Check both followingList (new) and following (old) for backward compatibility
+            const following = Array.isArray(userData.followingList) 
+              ? userData.followingList 
+              : Array.isArray(userData.following) 
+              ? userData.following 
+              : [];
+            const isCurrentlyFollowing = following.some(
+              (addr: string) => addr.toLowerCase() === targetWallet.toLowerCase()
+            );
+            setIsFollowing(isCurrentlyFollowing);
+          } else if (res.status === 404) {
+            // User doesn't exist yet, so not following
+            setIsFollowing(false);
+          }
+        } catch (err) {
+          console.error("Failed to refetch follow status:", err);
+        }
+      }, 500);
       
     } catch (error: any) {
       console.error("Follow error:", error);
@@ -103,7 +154,6 @@ export default function FollowButton({
     }
   };
   
-  // Don't render for own profile
   if (isOwnProfile) {
     return null;
   }
@@ -112,9 +162,9 @@ export default function FollowButton({
     return (
       <button 
         disabled
-        className="px-6 py-2.5 bg-gray-100 text-gray-400 rounded-xl font-bold text-sm cursor-not-allowed"
+        className="px-4 py-2 bg-slate-100 text-slate-400 rounded-lg font-semibold text-sm cursor-not-allowed"
       >
-        ...
+        <span className="inline-block w-12">...</span>
       </button>
     );
   }
@@ -124,9 +174,12 @@ export default function FollowButton({
       <button
         onClick={handleFollow}
         disabled={loading}
-        className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 transition-all shadow-sm flex items-center gap-1.5 text-xs disabled:opacity-50"
+        className="group px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-semibold hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all shadow-sm flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200"
       >
-        <span>✓</span> Following
+        <UserCheck className="w-4 h-4 group-hover:hidden" />
+        <X className="w-4 h-4 hidden group-hover:block" />
+        <span className="group-hover:hidden">Following</span>
+        <span className="hidden group-hover:block">Unfollow</span>
       </button>
     );
   }
@@ -135,9 +188,10 @@ export default function FollowButton({
     <button
       onClick={handleFollow}
       disabled={loading || !isConnected}
-      className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-bold hover:shadow-md transition-all shadow-sm flex items-center gap-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+      className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold hover:shadow-md hover:scale-[1.02] transition-all flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 whitespace-nowrap"
     >
-      <span>+</span> {loading ? "..." : "Follow"}
+      <UserPlus className="w-4 h-4" />
+      {loading ? "..." : "Follow"}
     </button>
   );
 }

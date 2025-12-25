@@ -38,11 +38,9 @@ export default function SwapForm({
   const isNoLiquidity = amountOut === "No Liquidity";
   const isError = amountOut === "Error";
 
-  // Quick balance shortcuts
   const setMaxBalance = () => {
     const bal = parseFloat(balanceA);
     if (bal > 0) {
-      // Leave a tiny bit for gas if it's the native token
       onAmountInChange(Math.max(0, bal - 0.001).toString());
     }
   };
@@ -55,7 +53,7 @@ export default function SwapForm({
   };
 
   return (
-    <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 p-6 md:p-8">
+    <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 p-6 md:p-8 relative">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
           <span className="text-white text-lg">🔄</span>
@@ -66,9 +64,9 @@ export default function SwapForm({
         </div>
       </div>
 
-      <div className="space-y-4">
-        {/* INPUT: FROM */}
-        <div className="space-y-2">
+      <div className="space-y-4 relative">
+        {/* INPUT: FROM - Highest priority for dropdown */}
+        <div className="space-y-2 relative" style={{ zIndex: 50 }}>
           <div className="flex justify-between items-center">
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">From</label>
             {tokenA && (
@@ -112,8 +110,8 @@ export default function SwapForm({
           )}
         </div>
 
-        {/* SWITCH BUTTON */}
-        <div className="flex justify-center -my-3 z-10 relative">
+        {/* SWITCH BUTTON - Medium priority */}
+        <div className="flex justify-center -my-3 relative" style={{ zIndex: 40 }}>
           <button 
             onClick={onSwitch}
             className="bg-white border border-gray-200 p-2 rounded-xl shadow-md hover:scale-110 hover:shadow-lg transition-all text-purple-600"
@@ -124,8 +122,8 @@ export default function SwapForm({
           </button>
         </div>
 
-        {/* INPUT: TO */}
-        <div className="space-y-2">
+        {/* INPUT: TO - Lower priority */}
+        <div className="space-y-2 relative" style={{ zIndex: 30 }}>
           <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">To (Estimated)</label>
           <div className={`bg-gray-50 rounded-2xl p-4 border ${
             isNoPool || isNoLiquidity || isError ? 'border-orange-300 bg-orange-50' : 'border-gray-100'
@@ -151,9 +149,9 @@ export default function SwapForm({
           )}
         </div>
 
-        {/* Price Impact / Rate Display */}
+        {/* Price Impact / Rate Display - Lowest priority */}
         {amountOut && !isNoPool && !isNoLiquidity && !isError && parseFloat(amountOut) > 0 && (
-          <div className="bg-purple-50 rounded-xl p-3 text-sm">
+          <div className="bg-purple-50 rounded-xl p-3 text-sm relative" style={{ zIndex: 20 }}>
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Rate</span>
               <span className="font-semibold text-gray-800">
@@ -163,17 +161,19 @@ export default function SwapForm({
           </div>
         )}
 
-        {/* SWAP BUTTON */}
+        {/* SWAP BUTTON - Base level */}
         <motion.button
-          whileHover={isSwapReady ? { scale: 1.02 } : {}}
-          whileTap={isSwapReady ? { scale: 0.98 } : {}}
+          whileHover={isSwapReady ? { scale: 1.02 } : undefined}
+          whileTap={isSwapReady ? { scale: 0.98 } : undefined}
+          transition={{ duration: 0.2 }}
           onClick={onSwap}
           disabled={loading || !isSwapReady || isNoPool || isNoLiquidity}
-          className={`w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-all mt-4 ${
+          className={`w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-all mt-4 relative ${
             isSwapReady && !isNoPool && !isNoLiquidity
               ? "bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:shadow-purple-500/30" 
               : "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
           }`}
+          style={{ zIndex: 10 }}
         >
           {loading ? (
             <div className="flex items-center justify-center gap-2">

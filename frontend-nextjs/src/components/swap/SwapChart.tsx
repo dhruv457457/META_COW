@@ -13,13 +13,11 @@ interface SwapChartProps {
 
 export default function SwapChart({ tokenA, tokenB, data, loading }: SwapChartProps) {
   
-  // Format timestamp for display
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp * 1000);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Format price for display
   const formatPrice = (price: number) => {
     if (price > 1000) return price.toFixed(0);
     if (price > 1) return price.toFixed(2);
@@ -29,7 +27,6 @@ export default function SwapChart({ tokenA, tokenB, data, loading }: SwapChartPr
 
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 p-6 h-full flex flex-col">
-      {/* Header */}
       <div className="mb-4">
         <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
           <span>📈</span>
@@ -43,7 +40,6 @@ export default function SwapChart({ tokenA, tokenB, data, loading }: SwapChartPr
         )}
       </div>
 
-      {/* Chart Container - FIXED: Proper sizing */}
       <div className="flex-1 min-h-0">
         {!tokenA || !tokenB ? (
           <div className="flex items-center justify-center h-full text-gray-400">
@@ -111,7 +107,6 @@ export default function SwapChart({ tokenA, tokenB, data, loading }: SwapChartPr
         )}
       </div>
 
-      {/* Stats Footer */}
       {data.length > 0 && (
         <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-4 text-center">
           <div>

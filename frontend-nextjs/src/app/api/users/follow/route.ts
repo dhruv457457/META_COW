@@ -20,6 +20,10 @@ export async function POST(req: NextRequest) {
     const followerLower = followerWallet.toLowerCase();
     const targetLower = targetWallet.toLowerCase();
 
+    console.log("=== FOLLOW REQUEST ===");
+    console.log("Follower:", followerLower);
+    console.log("Target:", targetLower);
+
     // Prevent following yourself
     if (followerLower === targetLower) {
       return NextResponse.json(
@@ -33,6 +37,9 @@ export async function POST(req: NextRequest) {
       User.findOne({ walletAddress: followerLower }),
       User.findOne({ walletAddress: targetLower })
     ]);
+    
+    console.log("Follower user found:", !!followerUser);
+    console.log("Target user found:", !!targetUser);
     
     if (!followerUser) {
       return NextResponse.json(
@@ -48,30 +55,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if already following
-    if (followerUser.following && followerUser.following.includes(targetLower)) {
-      return NextResponse.json(
-        { error: "Already following this user" }, 
-        { status: 400 }
-      );
+    // Check if already following - return success instead of error
+    const currentFollowing = followerUser.following || [];
+    const alreadyFollowing = currentFollowing.some((addr: string) => 
+      addr.toLowerCase() === targetLower
+    );
+    
+    console.log("Current following list:", currentFollowing);
+    console.log("Already following?:", alreadyFollowing);
+    
+    if (alreadyFollowing) {
+      // Return success but indicate already following
+      return NextResponse.json({ 
+        success: true,
+        message: "Already following this user",
+        alreadyFollowing: true,
+        followers: targetUser.followers?.length || 0,
+      });
     }
 
     // Update follower's following list
-    await User.findOneAndUpdate(
+    const updatedFollower = await User.findOneAndUpdate(
       { walletAddress: followerLower },
-      { $addToSet: { following: targetLower } }
+      { $addToSet: { following: targetLower } },
+      { new: true }
     );
 
     // Update target's followers list
-    await User.findOneAndUpdate(
+    const updatedTarget = await User.findOneAndUpdate(
       { walletAddress: targetLower },
-      { $addToSet: { followers: followerLower } }
+      { $addToSet: { followers: followerLower } },
+      { new: true }
     );
+
+    console.log("Updated follower following count:", updatedFollower?.following?.length);
+    console.log("Updated target followers count:", updatedTarget?.followers?.length);
 
     return NextResponse.json({ 
       success: true,
       message: "Successfully followed user",
-      followers: (targetUser.followers?.length || 0) + 1,
+      followers: updatedTarget?.followers?.length || 0,
     });
     
   } catch (error: any) {
@@ -102,17 +125,26 @@ export async function DELETE(req: NextRequest) {
     const followerLower = followerWallet.toLowerCase();
     const targetLower = targetWallet.toLowerCase();
 
+    console.log("=== UNFOLLOW REQUEST ===");
+    console.log("Unfollower:", followerLower);
+    console.log("Target:", targetLower);
+
     // Update follower's following list
-    await User.findOneAndUpdate(
+    const updatedFollower = await User.findOneAndUpdate(
       { walletAddress: followerLower },
-      { $pull: { following: targetLower } }
+      { $pull: { following: targetLower } },
+      { new: true }
     );
 
     // Update target's followers list
-    await User.findOneAndUpdate(
+    const updatedTarget = await User.findOneAndUpdate(
       { walletAddress: targetLower },
-      { $pull: { followers: followerLower } }
+      { $pull: { followers: followerLower } },
+      { new: true }
     );
+
+    console.log("Updated follower following count:", updatedFollower?.following?.length);
+    console.log("Updated target followers count:", updatedTarget?.followers?.length);
 
     return NextResponse.json({ 
       success: true,

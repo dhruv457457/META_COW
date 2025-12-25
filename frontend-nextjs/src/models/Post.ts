@@ -15,7 +15,7 @@ export interface IPost extends Document {
     txHash: string;
     timestamp: number;
   };
-  likes: string[]; // Array of wallet addresses who liked
+  likes: string[];
   comments: Array<{
     userWallet: string;
     username: string;
@@ -74,7 +74,7 @@ const PostSchema = new Schema<IPost>({
     txHash: {
       type: String,
       required: true,
-      unique: true, // One post per transaction
+      // ✅ REMOVED: unique: true (let the schema.index() handle it)
     },
     timestamp: {
       type: Number,
@@ -123,9 +123,14 @@ const PostSchema = new Schema<IPost>({
   },
 });
 
-// Indexes for efficient queries
-PostSchema.index({ createdAt: -1 });
-PostSchema.index({ userWallet: 1, createdAt: -1 });
-PostSchema.index({ "swapData.txHash": 1 }, { unique: true });
+// ✅ OPTIMIZED: Indexes defined only once
+PostSchema.index({ createdAt: -1 }); // Sort by newest first
+PostSchema.index({ userWallet: 1, createdAt: -1 }); // User's posts
+PostSchema.index({ "swapData.txHash": 1 }, { unique: true }); // ✅ Only here!
 
-export default mongoose.models.Post || mongoose.model<IPost>("Post", PostSchema);
+// ✅ Clear old model on hot reload
+if (mongoose.models.Post) {
+  delete mongoose.models.Post;
+}
+
+export default mongoose.model<IPost>("Post", PostSchema);

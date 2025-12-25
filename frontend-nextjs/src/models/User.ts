@@ -78,6 +78,23 @@ const UserSchema = new Schema<IUser>({
 UserSchema.index({ followers: 1 });
 UserSchema.index({ following: 1 });
 
+// Ensure followers/following are always arrays when converting to JSON
+UserSchema.set('toJSON', {
+  transform: function(doc, ret) {
+    ret.followers = Array.isArray(ret.followers) ? ret.followers : [];
+    ret.following = Array.isArray(ret.following) ? ret.following : [];
+    return ret;
+  }
+});
+
+UserSchema.set('toObject', {
+  transform: function(doc, ret) {
+    ret.followers = Array.isArray(ret.followers) ? ret.followers : [];
+    ret.following = Array.isArray(ret.following) ? ret.following : [];
+    return ret;
+  }
+});
+
 // Instance methods - MUST be defined before creating the model
 UserSchema.method('followUser', async function(this: IUser, targetWallet: string): Promise<void> {
   const targetWalletLower = targetWallet.toLowerCase();
@@ -87,15 +104,17 @@ UserSchema.method('followUser', async function(this: IUser, targetWallet: string
     throw new Error("Cannot follow yourself");
   }
   
+  // Ensure following is an array
+  if (!Array.isArray(this.following)) {
+    this.following = [];
+  }
+  
   // Check if already following
-  if (this.following && this.following.includes(targetWalletLower)) {
+  if (this.following.includes(targetWalletLower)) {
     throw new Error("Already following this user");
   }
   
   // Add to following list
-  if (!this.following) {
-    this.following = [];
-  }
   this.following.push(targetWalletLower);
   await this.save();
   
@@ -112,10 +131,13 @@ UserSchema.method('followUser', async function(this: IUser, targetWallet: string
 UserSchema.method('unfollowUser', async function(this: IUser, targetWallet: string): Promise<void> {
   const targetWalletLower = targetWallet.toLowerCase();
   
-  // Remove from following list
-  if (this.following) {
-    this.following = this.following.filter((w: string) => w !== targetWalletLower);
+  // Ensure following is an array
+  if (!Array.isArray(this.following)) {
+    this.following = [];
   }
+  
+  // Remove from following list
+  this.following = this.following.filter((w: string) => w !== targetWalletLower);
   await this.save();
   
   // Get User model

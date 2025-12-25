@@ -19,19 +19,27 @@ export async function GET(req: NextRequest) {
       { walletAddress: wallet },
       { $set: { lastActive: new Date() } },
       { new: true }
-    );
+    ).lean(); // Use .lean() for better performance with plain objects
     
     if (!user) {
       return NextResponse.json({ found: false }, { status: 404 });
     }
+    
+    // Ensure followers and following are always arrays
+    const followers = Array.isArray(user.followers) ? user.followers : [];
+    const following = Array.isArray(user.following) ? user.following : [];
     
     return NextResponse.json({
       username: user.username,
       bio: user.bio || "",
       avatar: user.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${wallet}`,
       walletAddress: user.walletAddress,
-      followers: user.followers?.length || 0,
-      following: user.following?.length || 0,
+      // For backward compatibility - keep the counts
+      followers: followers.length,
+      following: following.length,
+      // Add the actual arrays for FollowButton to use
+      followersList: followers,
+      followingList: following,
       reputation: user.reputation || 100,
       totalSwaps: user.totalSwaps || 0,
       totalVolume: user.totalVolume || "0",
@@ -105,6 +113,10 @@ export async function POST(req: NextRequest) {
       throw new Error("Failed to create/update user");
     }
 
+    // Ensure arrays are safe
+    const followers = Array.isArray(user.followers) ? user.followers : [];
+    const following = Array.isArray(user.following) ? user.following : [];
+
     return NextResponse.json({ 
       success: true, 
       user: {
@@ -112,8 +124,10 @@ export async function POST(req: NextRequest) {
         bio: user.bio || "",
         avatar: user.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${wallet}`,
         walletAddress: user.walletAddress,
-        followers: user.followers?.length || 0,
-        following: user.following?.length || 0,
+        followers: followers.length,
+        following: following.length,
+        followersList: followers,
+        followingList: following,
         reputation: user.reputation || 100,
         totalSwaps: user.totalSwaps || 0,
       }

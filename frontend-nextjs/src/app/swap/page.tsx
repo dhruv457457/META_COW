@@ -11,15 +11,12 @@ import SwapForm from "@/components/swap/SwapForm";
 import SwapChart from "@/components/swap/SwapChart";
 import TransactionList, { Transaction } from "@/components/TransactionList";
 import { motion } from "framer-motion";
-
-// ✅ Envio integration imports
 import { fetchSwapsByTokens, getPairInfo } from "@/utils/envioClient";
 import { transformSwapsToChartData, aggregateChartData, ChartDataPoint } from "@/utils/chartUtils";
 
 export default function SwapPage() {
   const { address, isConnected } = useWallet();
   
-  // State
   const [tokenA, setTokenA] = useState<Token | null>(tokenList[0]);
   const [tokenB, setTokenB] = useState<Token | null>(tokenList[1]);
   const [amountIn, setAmountIn] = useState("");
@@ -27,12 +24,9 @@ export default function SwapPage() {
   const [loading, setLoading] = useState(false);
   const [balanceA, setBalanceA] = useState("0");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  
-  // ✅ Chart state
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
 
-  // Fetch balance for input token
   useEffect(() => {
     const fetchBalance = async () => {
       if (!address || !tokenA) return;
@@ -48,11 +42,10 @@ export default function SwapPage() {
     };
 
     fetchBalance();
-    const interval = setInterval(fetchBalance, 10000); // Update every 10s
+    const interval = setInterval(fetchBalance, 10000);
     return () => clearInterval(interval);
   }, [address, tokenA]);
 
-  // ✅ Fetch chart data from Envio
   useEffect(() => {
     const fetchChartData = async () => {
       if (!tokenA || !tokenB) {
@@ -62,36 +55,24 @@ export default function SwapPage() {
 
       setChartLoading(true);
       try {
-        // First, check if pair exists
         const pairInfo = await getPairInfo(tokenA.address, tokenB.address);
         
         if (!pairInfo) {
-          console.log("No pair found for these tokens yet");
           setChartData([]);
           return;
         }
 
-        console.log(`Fetching swaps for pair: ${pairInfo.id}`);
-
-        // Fetch recent swaps (last 100)
         const swaps = await fetchSwapsByTokens(tokenA.address, tokenB.address, 100);
         
         if (swaps.length === 0) {
-          console.log("No swaps found yet");
           setChartData([]);
           return;
         }
 
-        console.log(`Found ${swaps.length} swaps`);
-
-        // Transform to chart data
         const rawData = transformSwapsToChartData(swaps, tokenA, tokenB);
-        
-        // Aggregate into 5-minute buckets for smoother chart
-        const aggregated = aggregateChartData(rawData, 300); // 5 min buckets
+        const aggregated = aggregateChartData(rawData, 300);
         
         setChartData(aggregated);
-        console.log(`Chart updated with ${aggregated.length} data points`);
         
       } catch (error) {
         console.error("Error fetching chart data:", error);
@@ -102,13 +83,10 @@ export default function SwapPage() {
     };
 
     fetchChartData();
-
-    // ✅ Auto-refresh every 30 seconds
     const interval = setInterval(fetchChartData, 30000);
     return () => clearInterval(interval);
   }, [tokenA, tokenB]);
 
-  // Calculate Estimated Output
   useEffect(() => {
     const calculateOut = async () => {
       if (!tokenA || !tokenB || !amountIn || parseFloat(amountIn) <= 0) {
@@ -119,26 +97,21 @@ export default function SwapPage() {
       try {
         const pairAddress = await getPairAddress(tokenA.address, tokenB.address);
         
-        // Check if pair exists
         if (pairAddress === ethers.ZeroAddress) {
           setAmountOut("No Pool");
           return;
         }
 
         const { reserve0, reserve1 } = await getReserves(pairAddress);
-        
-        // Determine which reserve is which based on token sorting
         const isTokenALower = tokenA.address.toLowerCase() < tokenB.address.toLowerCase();
         const reserveIn = isTokenALower ? reserve0 : reserve1;
         const reserveOut = isTokenALower ? reserve1 : reserve0;
 
-        // Check if reserves are sufficient
         if (reserveIn === 0n || reserveOut === 0n) {
           setAmountOut("No Liquidity");
           return;
         }
 
-        // AMM Formula: dy = (dx * 997 * y) / (x * 1000 + dx * 997)
         const inputAmountBN = ethers.parseUnits(amountIn, 18);
         const inputWithFee = inputAmountBN * 997n;
         const numerator = inputWithFee * reserveOut;
@@ -152,11 +125,10 @@ export default function SwapPage() {
       }
     };
 
-    const timer = setTimeout(calculateOut, 500); // Debounce
+    const timer = setTimeout(calculateOut, 500);
     return () => clearTimeout(timer);
   }, [amountIn, tokenA, tokenB]);
 
-  // Handle Swap Execution
   const handleSwap = async () => {
     if (!isConnected || !address) {
       toast.error("Please connect wallet first");
@@ -167,7 +139,6 @@ export default function SwapPage() {
       return;
     }
 
-    // Validate balance
     const amountWei = ethers.parseUnits(amountIn, 18);
     const balanceWei = ethers.parseUnits(balanceA, 18);
     
@@ -189,7 +160,6 @@ export default function SwapPage() {
       
       toast.success("Swap Successful! Chart will update shortly...");
       
-      // Add to local transaction history
       const newTx: Transaction = {
         type: "swap",
         inputTokenSymbol: tokenA.symbol,
@@ -201,11 +171,9 @@ export default function SwapPage() {
       };
       setTransactions(prev => [newTx, ...prev]);
       
-      // Reset form
       setAmountIn("");
       setAmountOut("");
 
-      // ✅ Refresh chart data after successful swap (wait a bit for indexer)
       setTimeout(async () => {
         if (tokenA && tokenB) {
           const swaps = await fetchSwapsByTokens(tokenA.address, tokenB.address, 100);
@@ -213,12 +181,11 @@ export default function SwapPage() {
           const aggregated = aggregateChartData(rawData, 300);
           setChartData(aggregated);
         }
-      }, 5000); // Wait 5 seconds for Envio to index
+      }, 5000);
 
     } catch (error: any) {
       console.error("Swap error:", error);
       
-      // Better error messages
       let errorMsg = "Swap failed";
       if (error.message?.includes("insufficient")) {
         errorMsg = "Insufficient liquidity or balance";
@@ -238,7 +205,6 @@ export default function SwapPage() {
     }
   };
 
-  // Switch Tokens
   const handleSwitch = () => {
     setTokenA(tokenB);
     setTokenB(tokenA);
@@ -250,11 +216,11 @@ export default function SwapPage() {
     <div className="max-w-7xl mx-auto px-4 py-12 md:px-8">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
         
-        {/* Left Side: Swap Interface */}
+        {/* Left Side: Swap Form */}
         <motion.div 
           initial={{ opacity: 0, x: -20 }} 
           animate={{ opacity: 1, x: 0 }}
-          className="space-y-8"
+          transition={{ duration: 0.5 }}
         >
           <SwapForm 
             tokenA={tokenA}
@@ -269,25 +235,33 @@ export default function SwapPage() {
             onSwap={handleSwap}
             loading={loading}
           />
-
-          <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-6 shadow-lg border border-white/20">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Your Recent Swaps</h3>
-            <TransactionList transactions={transactions} />
-          </div>
         </motion.div>
 
-        {/* Right Side: Chart with Live Data */}
+        {/* Right Side: Chart + Transactions */}
         <motion.div 
           initial={{ opacity: 0, x: 20 }} 
           animate={{ opacity: 1, x: 0 }}
-          className="h-[500px] hidden lg:block"
+          transition={{ duration: 0.5 }}
+          className="space-y-6"
         >
-          <SwapChart 
-            tokenA={tokenA} 
-            tokenB={tokenB} 
-            data={chartData}
-            loading={chartLoading}
-          />
+          {/* Price Chart */}
+          <div className="h-[400px]">
+            <SwapChart 
+              tokenA={tokenA} 
+              tokenB={tokenB} 
+              data={chartData}
+              loading={chartLoading}
+            />
+          </div>
+
+          {/* Transaction List */}
+          <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-6 shadow-xl border border-white/20">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-2xl">📜</span>
+              <h3 className="text-lg font-bold text-gray-800">Your Recent Swaps</h3>
+            </div>
+            <TransactionList transactions={transactions} />
+          </div>
         </motion.div>
 
       </div>

@@ -8,15 +8,19 @@ export async function GET(req: NextRequest) {
   
   const { searchParams } = new URL(req.url);
   const limit = parseInt(searchParams.get("limit") || "20");
-  const sortBy = searchParams.get("sortBy") || "totalSwaps"; // totalSwaps, reputation, createdAt
+  const sortBy = searchParams.get("sortBy") || "totalSwaps";
   const search = searchParams.get("search") || "";
 
   try {
     let query: any = {};
     
-    // Search by username if provided
+    // Search by username OR wallet address if provided
     if (search) {
-      query.username = { $regex: search, $options: 'i' };
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [
+        { username: searchRegex },
+        { walletAddress: searchRegex }
+      ];
     }
     
     // Determine sort order
@@ -26,7 +30,7 @@ export async function GET(req: NextRequest) {
         sort = { reputation: -1 };
         break;
       case "followers":
-        sort = { 'followers': -1 }; // This will sort by array length
+        sort = { followers: -1 };
         break;
       case "newest":
         sort = { createdAt: -1 };
@@ -46,9 +50,16 @@ export async function GET(req: NextRequest) {
 
     // Add computed follower/following counts
     const usersWithCounts = users.map(user => ({
-      ...user,
+      username: user.username,
+      bio: user.bio || "",
+      avatar: user.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${user.walletAddress}`,
+      walletAddress: user.walletAddress,
       followers: user.followers?.length || 0,
       following: user.following?.length || 0,
+      reputation: user.reputation || 100,
+      totalSwaps: user.totalSwaps || 0,
+      createdAt: user.createdAt,
+      lastActive: user.lastActive,
     }));
 
     return NextResponse.json({ 
