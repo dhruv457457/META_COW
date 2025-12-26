@@ -323,17 +323,7 @@ Score = 10,000 + 5,000 + 20,000 - 3,000 = 32,000 points
 
 - 🌐 [Website](https://metacow.vercel.app/)
 - 🐦 [Twitter @metacowdex](https://x.com/metacowdex)
-- 💼 [LinkedIn](https://linkedin.com/in/dhruvpancholi)
-- 📧 dhruv@metacow.dev
 
-### Development Stats
-```
-⏱️ 6 weeks development
-📝 15,000+ lines of code
-💻 50+ components
-🔗 2 upgradeable contracts
-📡 15+ API endpoints
-```
 
 ---
 
@@ -344,12 +334,6 @@ Score = 10,000 + 5,000 + 20,000 - 3,000 = 32,000 points
 - [ERC-7715 Specification](https://eips.ethereum.org/EIPS/eip-7715)
 - [Envio Docs](https://docs.envio.dev/)
 
-### Project Files
-- Smart Contracts: `contracts/`
-- Frontend: `src/app/`, `src/components/`
-- Backend: `src/api/`, `railway/`
-- Envio: `envio.config.yaml`, `src/EventHandlers.ts`
-- GraphQL: `src/graphql/`
 
 ---
 
