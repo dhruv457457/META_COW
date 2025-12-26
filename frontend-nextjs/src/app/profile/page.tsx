@@ -29,7 +29,6 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [isNewUser, setIsNewUser] = useState(false);
 
-  // Load profile data
   useEffect(() => {
     const fetchProfile = async () => {
       if (!address) {
@@ -47,7 +46,6 @@ export default function ProfilePage() {
           setBio(data.bio || "");
           setIsNewUser(false);
         } else {
-          // New user - no profile yet
           setIsNewUser(true);
           setProfile(null);
         }
@@ -105,74 +103,69 @@ export default function ProfilePage() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-blue-50/30 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600 font-medium">Loading profile...</p>
+          <div className="w-12 h-12 border-3 border-gray-300 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading profile...</p>
         </div>
       </div>
     );
   }
 
-  // Not connected
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-blue-50/30 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-12 text-center border border-purple-100">
-          <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-4xl">🔐</span>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-sm p-12 text-center border border-gray-200">
+          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <span className="text-3xl">🔐</span>
           </div>
-          <h2 className="text-3xl font-black text-slate-800 mb-3">Connect Wallet</h2>
-          <p className="text-slate-600 mb-6">Connect your wallet to view and manage your profile</p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Connect Wallet</h2>
+          <p className="text-gray-600">Connect your wallet to view your profile</p>
         </div>
       </div>
     );
   }
 
-  // Edit mode or New user
   if (isEditMode || isNewUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-blue-50/30 py-12 px-6">
+      <div className="min-h-screen bg-gray-50 py-12 px-6">
         <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 border border-purple-100">
+          <div className="bg-white rounded-2xl shadow-sm p-8 border border-gray-200">
             <div className="text-center mb-8">
-              <div className="w-28 h-28 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full mx-auto mb-4 overflow-hidden border-4 border-white shadow-xl">
+              <div className="w-24 h-24 bg-purple-600 rounded-full mx-auto mb-4 overflow-hidden border-4 border-white shadow-lg">
                 <img 
                   src={profile?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${address}`} 
                   alt="Avatar" 
                   className="w-full h-full object-cover"
                 />
               </div>
-              <h1 className="text-3xl font-black text-slate-800 mb-2">
-                {isNewUser ? "🎉 Welcome to MetaCow!" : "✏️ Edit Your Profile"}
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                {isNewUser ? "Create Your Profile" : "Edit Profile"}
               </h1>
-              <p className="text-sm text-slate-500 font-mono">{formatAddress(address!)}</p>
+              <p className="text-sm text-gray-500 font-mono">{formatAddress(address!)}</p>
             </div>
 
-            <div className="space-y-6">
-              {/* Username */}
+            <div className="space-y-5">
               <div>
-                <label className="block text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
-                  <span>👤</span> Username
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Username
                 </label>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Choose your trading name"
+                  placeholder="Choose your username"
                   maxLength={20}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all text-slate-800 font-medium"
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-100 outline-none transition-all text-gray-900"
                 />
-                <p className="text-xs text-slate-500 mt-1">Max 20 characters</p>
+                <p className="text-xs text-gray-500 mt-1">Max 20 characters</p>
               </div>
 
-              {/* Bio */}
               <div>
-                <label className="block text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
-                  <span>📝</span> Bio
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Bio
                 </label>
                 <textarea
                   value={bio}
@@ -180,20 +173,19 @@ export default function ProfilePage() {
                   placeholder="Tell traders about your strategy..."
                   maxLength={160}
                   rows={4}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all resize-none text-slate-800"
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-100 outline-none transition-all resize-none text-gray-900"
                 />
                 <div className="flex justify-between items-center mt-1">
-                  <p className="text-xs text-slate-500">Optional</p>
-                  <p className="text-xs text-slate-500">{bio.length}/160</p>
+                  <p className="text-xs text-gray-500">Optional</p>
+                  <p className="text-xs text-gray-500">{bio.length}/160</p>
                 </div>
               </div>
 
-              {/* Buttons */}
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={handleSave}
                   disabled={saving || !username.trim()}
-                  className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-4 rounded-xl hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  className="flex-1 bg-purple-600 text-white font-semibold py-3 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? "Saving..." : isNewUser ? "Create Profile" : "Save Changes"}
                 </button>
@@ -206,7 +198,7 @@ export default function ProfilePage() {
                       setBio(profile?.bio || "");
                     }}
                     disabled={saving}
-                    className="px-6 py-4 border-2 border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
+                    className="px-6 py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -219,56 +211,63 @@ export default function ProfilePage() {
     );
   }
 
-  // Profile view
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-blue-50/30 py-8 px-6">
+    <div className="min-h-screen bg-gray-50 py-8 px-6">
       <div className="max-w-6xl mx-auto">
         {/* Profile Header */}
-        <div className="bg-white rounded-3xl shadow-xl p-8 mb-6 border border-purple-100">
+        <div className="bg-white rounded-2xl shadow-sm p-8 mb-6 border border-gray-200">
           <div className="flex flex-col lg:flex-row items-start justify-between gap-8">
             <div className="flex items-center gap-6">
               <div className="relative">
-                <div className="w-32 h-32 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full overflow-hidden border-4 border-white shadow-2xl">
+                <div className="w-28 h-28 bg-purple-600 rounded-full overflow-hidden border-4 border-white shadow-lg">
                   <img 
                     src={profile?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${address}`}
                     alt={profile?.username}
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-green-500 rounded-full border-4 border-white flex items-center justify-center">
-                  <span className="text-white text-lg">✓</span>
+                <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full border-4 border-white flex items-center justify-center">
+                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                  </svg>
                 </div>
               </div>
               
               <div>
-                <h1 className="text-4xl font-black text-slate-800 mb-2">{profile?.username}</h1>
-                <p className="text-sm text-slate-500 font-mono mb-4">{formatAddress(address!)}</p>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{profile?.username}</h1>
+                <p className="text-sm text-gray-500 font-mono mb-4">{formatAddress(address!)}</p>
                 {profile?.bio && (
-                  <p className="text-slate-600 mb-4 max-w-xl leading-relaxed">{profile.bio}</p>
+                  <p className="text-gray-700 mb-4 max-w-xl">{profile.bio}</p>
                 )}
                 
                 <div className="flex items-center gap-6 flex-wrap">
-                  <div className="flex items-center gap-2 bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-2 rounded-xl border border-purple-200">
-                    <span className="text-2xl">👥</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <span className="text-xl">👥</span>
+                    </div>
                     <div>
-                      <div className="font-black text-slate-800 text-lg">{profile?.followers || 0}</div>
-                      <div className="text-xs text-slate-600">Followers</div>
+                      <div className="font-bold text-gray-900">{profile?.followers || 0}</div>
+                      <div className="text-xs text-gray-600">Followers</div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-cyan-50 px-4 py-2 rounded-xl border border-blue-200">
-                    <span className="text-2xl">➕</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <span className="text-xl">➕</span>
+                    </div>
                     <div>
-                      <div className="font-black text-slate-800 text-lg">{profile?.following || 0}</div>
-                      <div className="text-xs text-slate-600">Following</div>
+                      <div className="font-bold text-gray-900">{profile?.following || 0}</div>
+                      <div className="text-xs text-gray-600">Following</div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-2 rounded-xl border border-green-200">
-                    <span className="text-2xl">🔄</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <span className="text-xl">🔄</span>
+                    </div>
                     <div>
-                      <div className="font-black text-slate-800 text-lg">{profile?.totalSwaps || 0}</div>
-                      <div className="text-xs text-slate-600">Trades</div>
+                      <div className="font-bold text-gray-900">{profile?.totalSwaps || 0}</div>
+                      <div className="text-xs text-gray-600">Trades</div>
                     </div>
                   </div>
                 </div>
@@ -277,43 +276,43 @@ export default function ProfilePage() {
             
             <button
               onClick={() => setIsEditMode(true)}
-              className="px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold rounded-xl hover:shadow-xl hover:scale-[1.02] transition-all flex items-center gap-2 whitespace-nowrap"
+              className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 whitespace-nowrap"
             >
-              <span>✏️</span> Edit Profile
+              ✏️ Edit Profile
             </button>
           </div>
         </div>
 
         {/* Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Session Monitor - Takes 2 columns */}
+          {/* Session Monitor */}
           <div className="lg:col-span-2">
             <SessionMonitor />
           </div>
 
-          {/* Right Sidebar */}
+          {/* Sidebar */}
           <div className="space-y-6">
-            {/* Stats Card */}
-            <div className="bg-gradient-to-br from-purple-500 to-blue-500 rounded-3xl shadow-xl p-6 text-white">
-              <h2 className="text-xl font-black mb-4 flex items-center gap-2">
-                <span>⭐</span> Your Stats
+            {/* Stats */}
+            <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                ⭐ Your Stats
               </h2>
               
               <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 border border-white/30">
-                  <div className="text-3xl font-black mb-1">{profile?.reputation || 100}</div>
-                  <div className="text-xs opacity-90">Reputation</div>
+                <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+                  <div className="text-2xl font-bold text-purple-600 mb-1">{profile?.reputation || 100}</div>
+                  <div className="text-xs text-gray-600">Reputation</div>
                 </div>
                 
-                <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 border border-white/30">
-                  <div className="text-3xl font-black mb-1">{profile?.totalSwaps || 0}</div>
-                  <div className="text-xs opacity-90">Total Trades</div>
+                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+                  <div className="text-2xl font-bold text-green-600 mb-1">{profile?.totalSwaps || 0}</div>
+                  <div className="text-xs text-gray-600">Total Trades</div>
                 </div>
               </div>
               
-              <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 border border-white/30">
-                <p className="text-sm opacity-90">
-                  <strong>Member since:</strong>{" "}
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                <p className="text-sm text-gray-600">
+                  <strong className="text-gray-900">Member since:</strong>{" "}
                   {profile?.createdAt 
                     ? new Date(profile.createdAt).toLocaleDateString('en-US', {
                         month: 'long',
@@ -325,48 +324,48 @@ export default function ProfilePage() {
             </div>
 
             {/* Quick Actions */}
-            <div className="bg-white rounded-3xl shadow-xl p-6 border border-purple-100">
-              <h2 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2">
-                <span>⚡</span> Quick Actions
+            <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                ⚡ Quick Actions
               </h2>
               
               <div className="space-y-3">
                 <Link 
                   href="/social"
-                  className="group flex items-center gap-3 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl hover:shadow-lg hover:scale-[1.02] transition-all border border-purple-200"
+                  className="flex items-center gap-3 p-4 bg-purple-50 rounded-xl border border-purple-100 hover:bg-purple-100 transition-colors"
                 >
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center text-white">
                     ✨
                   </div>
                   <div>
-                    <div className="font-bold text-slate-800">Social Feed</div>
-                    <div className="text-sm text-slate-600">View live trades</div>
+                    <div className="font-semibold text-gray-900">Social Feed</div>
+                    <div className="text-xs text-gray-600">View live trades</div>
                   </div>
                 </Link>
                 
                 <Link 
                   href="/swap"
-                  className="group flex items-center gap-3 p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl hover:shadow-lg hover:scale-[1.02] transition-all border border-blue-200"
+                  className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors"
                 >
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
                     🔄
                   </div>
                   <div>
-                    <div className="font-bold text-slate-800">Swap Tokens</div>
-                    <div className="text-sm text-slate-600">Trade on DEX</div>
+                    <div className="font-semibold text-gray-900">Swap Tokens</div>
+                    <div className="text-xs text-gray-600">Trade on DEX</div>
                   </div>
                 </Link>
                 
                 <Link 
                   href="/liquidity"
-                  className="group flex items-center gap-3 p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl hover:shadow-lg hover:scale-[1.02] transition-all border border-green-200"
+                  className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-100 hover:bg-green-100 transition-colors"
                 >
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center text-white">
                     💧
                   </div>
                   <div>
-                    <div className="font-bold text-slate-800">Add Liquidity</div>
-                    <div className="text-sm text-slate-600">Earn 0.3% fees</div>
+                    <div className="font-semibold text-gray-900">Add Liquidity</div>
+                    <div className="text-xs text-gray-600">Earn 0.3% fees</div>
                   </div>
                 </Link>
               </div>

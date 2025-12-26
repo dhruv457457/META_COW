@@ -55,7 +55,6 @@ export default function SessionMonitor() {
     };
 
     fetchSessionData();
-    
     const interval = setInterval(fetchSessionData, 30000);
     return () => clearInterval(interval);
   }, [address]);
@@ -66,10 +65,10 @@ export default function SessionMonitor() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-3xl shadow-xl border border-purple-100 p-12">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12">
         <div className="flex flex-col items-center justify-center">
-          <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-4"></div>
-          <p className="text-slate-600 font-medium">Loading session data...</p>
+          <div className="w-12 h-12 border-3 border-gray-300 border-t-purple-600 rounded-full animate-spin mb-4"></div>
+          <p className="text-gray-600">Loading session data...</p>
         </div>
       </div>
     );
@@ -77,24 +76,24 @@ export default function SessionMonitor() {
 
   if (!data?.session) {
     return (
-      <div className="bg-gradient-to-br from-purple-500 to-blue-500 rounded-3xl shadow-xl p-12 text-center text-white">
-        <div className="w-24 h-24 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-white/30">
-          <span className="text-5xl">🤖</span>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
+        <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <span className="text-4xl">🤖</span>
         </div>
-        <h3 className="text-3xl font-black mb-3">
+        <h3 className="text-2xl font-bold text-gray-900 mb-3">
           Smart Account Agent
         </h3>
-        <p className="text-lg mb-2 opacity-90">
+        <p className="text-gray-600 mb-2">
           No session account yet
         </p>
-        <p className="text-sm opacity-75 mb-8 max-w-md mx-auto">
-          Enable auto-copy trading to create your smart account agent and start following top traders automatically.
+        <p className="text-sm text-gray-500 mb-8 max-w-md mx-auto">
+          Enable auto-copy trading to create your smart account agent.
         </p>
         <Link
           href="/copy-trade"
-          className="inline-flex items-center gap-2 px-8 py-4 bg-white text-purple-600 font-bold rounded-xl hover:shadow-2xl hover:scale-105 transition-all"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
         >
-          <span>🚀</span> Create Session Account
+          🚀 Create Session Account
         </Link>
       </div>
     );
@@ -105,67 +104,65 @@ export default function SessionMonitor() {
   return (
     <div className="space-y-6">
       {/* Session Account Card */}
-      <div className="bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 rounded-3xl shadow-xl p-8 text-white">
+      <div className="bg-purple-600 rounded-2xl shadow-sm p-8 text-white">
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-lg border-2 border-white/30">
-              <span className="text-4xl">🤖</span>
+            <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
+              <span className="text-3xl">🤖</span>
             </div>
             <div>
-              <h3 className="text-2xl font-black mb-1">
+              <h3 className="text-xl font-bold mb-1">
                 Smart Account Agent
               </h3>
-              <p className="text-sm opacity-90">Automated Trading Active</p>
+              <p className="text-sm text-purple-100">Automated Trading Active</p>
             </div>
           </div>
-          <div className="px-4 py-2 bg-green-400/30 backdrop-blur-sm text-green-100 text-sm font-bold rounded-full border border-green-300/50 flex items-center gap-2">
+          <div className="px-3 py-1.5 bg-green-400/20 text-green-100 text-sm font-semibold rounded-full border border-green-300/30 flex items-center gap-1.5">
             <span className="w-2 h-2 bg-green-300 rounded-full animate-pulse"></span>
             ONLINE
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Smart Account */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-5 border border-white/20">
+          <div className="bg-white/10 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-xs font-bold opacity-75 flex items-center gap-2">
-                <span>🎯</span> SMART ACCOUNT
+              <div className="text-xs font-semibold text-purple-200">
+                🎯 SMART ACCOUNT
               </div>
               <button
                 onClick={() => navigator.clipboard.writeText(session.smartAccountAddress)}
-                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-white/10 rounded transition-colors"
                 title="Copy address"
               >
                 📋
               </button>
             </div>
-            <code className="text-sm font-mono font-bold">
+            <code className="text-sm font-mono font-semibold">
               {formatAddress(session.smartAccountAddress)}
             </code>
           </div>
 
-          {/* Signer */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-5 border border-white/20">
+          <div className="bg-white/10 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-xs font-bold opacity-75 flex items-center gap-2">
-                <span>🔑</span> SIGNER (EOA)
+              <div className="text-xs font-semibold text-purple-200">
+                🔑 SIGNER (EOA)
               </div>
               <button
                 onClick={() => navigator.clipboard.writeText(session.eoaAddress)}
-                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-white/10 rounded transition-colors"
                 title="Copy address"
               >
                 📋
               </button>
             </div>
-            <code className="text-sm font-mono font-bold">
+            <code className="text-sm font-mono font-semibold">
               {formatAddress(session.eoaAddress)}
             </code>
           </div>
         </div>
 
         <div className="text-center mt-6 pt-6 border-t border-white/20">
-          <p className="text-sm opacity-75">
+          <p className="text-sm text-purple-200">
             Created {new Date(session.createdAt).toLocaleDateString('en-US', {
               month: 'long',
               day: 'numeric',
@@ -177,58 +174,58 @@ export default function SessionMonitor() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-purple-100 p-6 hover:shadow-xl hover:scale-105 transition-all">
-          <div className="text-4xl font-black bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow">
+          <div className="text-3xl font-bold text-purple-600 mb-1">
             {data.stats.activePermissions}
           </div>
-          <div className="text-sm text-slate-600 font-medium">Active</div>
+          <div className="text-sm text-gray-600">Active</div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg border border-blue-100 p-6 hover:shadow-xl hover:scale-105 transition-all">
-          <div className="text-4xl font-black bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent mb-2">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow">
+          <div className="text-3xl font-bold text-blue-600 mb-1">
             {data.stats.totalPermissions}
           </div>
-          <div className="text-sm text-slate-600 font-medium">Following</div>
+          <div className="text-sm text-gray-600">Following</div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg border border-green-100 p-6 hover:shadow-xl hover:scale-105 transition-all">
-          <div className="text-4xl font-black bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mb-2">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow">
+          <div className="text-3xl font-bold text-green-600 mb-1">
             {data.stats.totalTrades}
           </div>
-          <div className="text-sm text-slate-600 font-medium">Trades</div>
+          <div className="text-sm text-gray-600">Trades</div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg border border-yellow-100 p-6 hover:shadow-xl hover:scale-105 transition-all">
-          <div className="text-4xl font-black bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent mb-2">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow">
+          <div className="text-3xl font-bold text-orange-600 mb-1">
             ${parseFloat(data.stats.totalVolume || "0").toFixed(0)}
           </div>
-          <div className="text-sm text-slate-600 font-medium">Volume</div>
+          <div className="text-sm text-gray-600">Volume</div>
         </div>
       </div>
 
-      {/* Active Permissions */}
+      {/* Following Traders */}
       {data.permissions.length > 0 && (
-        <div className="bg-white rounded-3xl shadow-xl border border-purple-100 p-6">
-          <h4 className="font-black text-slate-800 mb-6 flex items-center gap-2 text-xl">
-            <span>👥</span> Following Traders ({data.stats.activePermissions})
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+          <h4 className="font-bold text-gray-900 mb-6 flex items-center gap-2 text-lg">
+            👥 Following Traders ({data.stats.activePermissions})
           </h4>
           
           <div className="space-y-3">
             {data.permissions.slice(0, 5).map((perm) => (
               <div 
                 key={perm.id} 
-                className="group flex items-center justify-between p-4 bg-gradient-to-br from-slate-50 to-purple-50/30 rounded-2xl border border-slate-200 hover:shadow-lg hover:scale-[1.02] transition-all"
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center text-white font-bold">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold">
                     {perm.traderUsername?.[0]?.toUpperCase() || "?"}
                   </div>
                   <div>
-                    <div className="font-bold text-slate-800">
+                    <div className="font-semibold text-gray-900">
                       {perm.traderUsername || formatAddress(perm.traderAddress)}
                     </div>
-                    <div className="text-xs text-slate-500">
-                      <span className="font-semibold text-slate-700">
+                    <div className="text-xs text-gray-500">
+                      <span className="font-semibold text-gray-700">
                         {parseFloat(perm.spentToday || "0").toFixed(2)}
                       </span>
                       {" / "}
@@ -236,12 +233,11 @@ export default function SessionMonitor() {
                     </div>
                   </div>
                 </div>
-                <div className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+                <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
                   perm.isActive 
                     ? 'bg-green-100 text-green-700 border border-green-200' 
-                    : 'bg-slate-100 text-slate-500 border border-slate-200'
+                    : 'bg-gray-200 text-gray-600 border border-gray-300'
                 }`}>
-                  <span className={`w-2 h-2 rounded-full ${perm.isActive ? 'bg-green-500' : 'bg-slate-400'}`}></span>
                   {perm.isActive ? 'ACTIVE' : 'PAUSED'}
                 </div>
               </div>
@@ -251,7 +247,7 @@ export default function SessionMonitor() {
           {data.permissions.length > 5 && (
             <Link
               href="/copy-trade"
-              className="block text-center text-sm text-purple-600 hover:text-purple-700 font-bold mt-4 py-2 hover:bg-purple-50 rounded-xl transition-all"
+              className="block text-center text-sm text-purple-600 hover:text-purple-700 font-semibold mt-4 py-2 hover:bg-purple-50 rounded-lg transition-colors"
             >
               View all {data.permissions.length} traders →
             </Link>
@@ -262,7 +258,7 @@ export default function SessionMonitor() {
       {/* Manage Button */}
       <Link
         href="/copy-trade"
-        className="block w-full text-center px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold rounded-2xl hover:shadow-xl hover:scale-[1.02] transition-all"
+        className="block w-full text-center px-6 py-4 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 transition-colors"
       >
         Manage Auto-Copy Trading →
       </Link>
