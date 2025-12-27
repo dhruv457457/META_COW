@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import CopyTradePermission from "@/models/CopyTradePermission";
+import Session from "@/models/Session";
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,25 +20,36 @@ export async function GET(req: NextRequest) {
 
     await dbConnect();
 
-    // Check for active permission
+    const userLower = userAddress.toLowerCase();
+    const traderLower = traderAddress.toLowerCase();
+    const tokenLower = inputToken.toLowerCase();
+
+    // ✅ Check if this is an EOA that has a smart account
+    // If so, we need to check using the smart account address
+    const session = await Session.findOne({ userAddress: userLower });
+    
+    // Build an array of possible wallet addresses to check
+    const walletsToCheck = [userLower];
+    
+    if (session?.smartAccountAddress) {
+      walletsToCheck.push(session.smartAccountAddress.toLowerCase());
+    }
+
+    console.log(`🔍 Checking status for wallets:`, walletsToCheck);
+
+    // ✅ FIXED: Check for THIS user's permission (either their EOA or smart account)
     const permission = await CopyTradePermission.findOne({
-      userWallet: userAddress.toLowerCase(), // This might be smart account OR EOA
-      traderAddress: traderAddress.toLowerCase(),
-      inputToken: inputToken.toLowerCase(),
+      userWallet: { $in: walletsToCheck },
+      traderAddress: traderLower,
+      inputToken: tokenLower,
       isActive: true,
     });
 
-    // Also check if there's a permission with a different userWallet
-    // (In case user is checking with EOA but permission is saved with smart account)
-    const anyPermission = await CopyTradePermission.findOne({
-      traderAddress: traderAddress.toLowerCase(),
-      inputToken: inputToken.toLowerCase(),
-      isActive: true,
-    });
+    console.log(`✅ Permission found:`, !!permission);
 
     return NextResponse.json({
-      isEnabled: !!permission || !!anyPermission,
-      permission: permission || anyPermission || null,
+      isEnabled: !!permission,
+      permission: permission || null,
     });
   } catch (error: any) {
     console.error("Status check error:", error);

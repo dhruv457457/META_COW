@@ -65,6 +65,27 @@ export default function SessionMonitor() {
   const [data, setData] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Format large numbers with K, M, B, T suffixes
+  const formatVolume = (value: string | number): string => {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    
+    if (isNaN(num) || num === 0) return "$0";
+    
+    const absNum = Math.abs(num);
+    
+    if (absNum >= 1_000_000_000_000) {
+      return `$${(num / 1_000_000_000_000).toFixed(2)}T`;
+    } else if (absNum >= 1_000_000_000) {
+      return `$${(num / 1_000_000_000).toFixed(2)}B`;
+    } else if (absNum >= 1_000_000) {
+      return `$${(num / 1_000_000).toFixed(2)}M`;
+    } else if (absNum >= 1_000) {
+      return `$${(num / 1_000).toFixed(2)}K`;
+    } else {
+      return `$${num.toFixed(2)}`;
+    }
+  };
+
   useEffect(() => {
     const fetchSessionData = async () => {
       if (!address) {
@@ -235,7 +256,7 @@ export default function SessionMonitor() {
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow">
           <div className="text-3xl font-bold text-orange-600 mb-1 break-words">
-            ${parseFloat(data.stats.totalVolume || "0").toFixed(0)}
+            {formatVolume(data.stats.totalVolume || "0")}
           </div>
           <div className="text-sm text-gray-600">Volume</div>
         </div>
