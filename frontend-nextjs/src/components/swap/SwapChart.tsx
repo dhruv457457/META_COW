@@ -79,7 +79,7 @@ const ArrowTrendingUpIcon = (props: any) => (
 );
 
 export default function SwapChart({ tokenA, tokenB, data, loading }: SwapChartProps) {
-  const [selectedTimeFrame, setSelectedTimeFrame] = useState<TimeFrame>('1D');
+const [selectedTimeFrame, setSelectedTimeFrame] = useState<TimeFrame>('ALL');
   const [filteredData, setFilteredData] = useState<ChartDataPoint[]>([]);
   const [offset, setOffset] = useState(0); // For navigating history
   const [hasDataInCurrentView, setHasDataInCurrentView] = useState(true);
