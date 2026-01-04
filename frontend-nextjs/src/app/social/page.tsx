@@ -81,7 +81,7 @@ export default function SocialPage() {
   
   // Filter states
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>("7d");
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
   
   // Modal states
   const [createPostModal, setCreatePostModal] = useState<EnvioSwapEvent | null>(null);
