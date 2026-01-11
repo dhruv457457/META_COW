@@ -1,7 +1,7 @@
 import { GraphQLClient } from 'graphql-request';
 
 // Your deployed Envio indexer endpoint
-const ENVIO_ENDPOINT = 'https://indexer.dev.hyperindex.xyz/d335f52/v1/graphql';
+const ENVIO_ENDPOINT = 'https://indexer.dev.hyperindex.xyz/e39b553/v1/graphql';
 
 const client = new GraphQLClient(ENVIO_ENDPOINT);
 
